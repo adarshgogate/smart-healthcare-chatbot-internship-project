@@ -1,8 +1,3 @@
-# smart-healthcare-chatbot-internship-project
-Perfect — here’s a **ready-to-use GitHub README template** tailored for your **Smart Healthcare Chatbot** project. You can copy this directly into your repo, edit details as you progress, and it will look polished for evaluators and recruiters.
-
----
-
 # 🩺 Smart Healthcare Chatbot
 
 ## 📌 Overview

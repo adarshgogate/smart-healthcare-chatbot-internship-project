@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Snackbar, Alert, CircularProgress } from "@mui/material";
 import api from "../api/axios";
 import {
   Box,
@@ -21,14 +22,19 @@ function Chatbot() {
   const [isSending, setIsSending] = useState(false);
   const chatEndRef = useRef(null);
 
-  // Auto-scroll to latest message
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // --- Booking function ---
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
+  const [loadingSlot, setLoadingSlot] = useState(null);
   const handleBookAppointment = async (doctor, slot) => {
     try {
+      setLoadingSlot(slot);
       const res = await api.post("/appointments/book", {
         doctorName: doctor.name,
         specialization: doctor.specialization,
@@ -36,49 +42,57 @@ function Chatbot() {
       });
 
       if (res.data.success) {
-        // Show confirmation in chat
-        setMessages((prev) => [
-          ...prev,
-          {
-            sender: "bot",
-            text: `✅ Appointment booked with ${doctor.name} at ${slot}`,
-          },
-        ]);
-
-        // Update doctor list so slot is disabled
         setMessages((prev) =>
-          prev.map((msg) =>
-            msg.sender === "doctorList"
-              ? {
+          prev
+            .map((msg) => {
+              if (msg.sender === "doctorList") {
+                return {
                   ...msg,
                   doctors: msg.doctors.map((d) =>
                     d.name === doctor.name
-                      ? { ...d, booked_slots: [...(d.booked_slots || []), slot] }
-                      : d
+                      ? {
+                          ...d,
+                          available_slots: d.available_slots.filter(
+                            (s) => s !== slot,
+                          ),
+                          booked_slots: [...(d.booked_slots || []), slot],
+                        }
+                      : d,
                   ),
-                }
-              : msg
-          )
+                };
+              }
+              return msg;
+            })
+            .concat({
+              sender: "bot",
+              text: `📌 Appointment request sent to ${doctor.name} at ${slot}. Awaiting doctor confirmation.`,
+            }),
         );
+
+        setSnackbar({
+          open: true,
+          message: `Appointment booked with ${doctor.name} at ${slot}`,
+          severity: "success",
+        });
       } else {
-        setMessages((prev) => [
-          ...prev,
-          { sender: "bot", text: `❌ Slot ${slot} is already taken.` },
-        ]);
+        setSnackbar({
+          open: true,
+          message: `❌ Slot ${slot} is already taken.`,
+          severity: "error",
+        });
       }
     } catch (err) {
       console.error("Booking error", err);
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: "bot",
-          text: "⚠️ Error booking appointment. Please try again.",
-        },
-      ]);
+      setSnackbar({
+        open: true,
+        message: "⚠️ Error booking appointment. Please try again.",
+        severity: "error",
+      });
+    } finally {
+      setLoadingSlot(null);
     }
   };
 
-  // --- Sending function ---
   const handleSend = async (query = input) => {
     if (!query.trim() || isSending) return;
     setIsSending(true);
@@ -106,10 +120,7 @@ function Chatbot() {
       }
 
       if (doctors.length > 0) {
-        setMessages((prev) => [
-          ...prev,
-          { sender: "doctorList", doctors },
-        ]);
+        setMessages((prev) => [...prev, { sender: "doctorList", doctors }]);
       }
     } catch (err) {
       console.error("Chatbot error", err);
@@ -165,14 +176,18 @@ function Chatbot() {
                         return (
                           <Button
                             key={j}
-                            variant="contained"
-                            color={isTaken ? "inherit" : "success"}
+                            variant="outlined"
+                            color={isTaken ? "error" : "success"}
                             size="small"
-                            disabled={isTaken}
-                            sx={{ opacity: isTaken ? 0.5 : 1 }}
+                            disabled={isTaken || loadingSlot === slot}
+                            sx={{ opacity: isTaken ? 0.5 : 1, borderRadius: 2 }}
                             onClick={() => handleBookAppointment(doc, slot)}
                           >
-                            {slot}
+                            {loadingSlot === slot ? (
+                              <CircularProgress size={18} />
+                            ) : (
+                              slot
+                            )}
                           </Button>
                         );
                       })}
@@ -284,6 +299,22 @@ function Chatbot() {
           {isSending ? "..." : "Send"}
         </Button>
       </Box>
+
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

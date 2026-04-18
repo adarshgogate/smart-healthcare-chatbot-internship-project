@@ -1,5 +1,21 @@
 import React, { useEffect, useState } from "react";
 import api from "../../api/axios";
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Button,
+  TextField,
+  Select,
+  MenuItem,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Paper,
+} from "@mui/material";
 
 function PatientDashboard() {
   const [appointments, setAppointments] = useState([]);
@@ -7,24 +23,18 @@ function PatientDashboard() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [description, setDescription] = useState("");
-  const [doctors, setDoctors] = useState([]); 
-  const patientId = localStorage.getItem("role_id"); 
-  
+  const [doctors, setDoctors] = useState([]);
+  const patientId = localStorage.getItem("role_id");
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch doctors
         const doctorRes = await api.get("/doctors");
-        // Some APIs return { doctors: [...] }, others return just [...]
         const doctorList = doctorRes.data.doctors || doctorRes.data;
         setDoctors(doctorList);
 
-        // Fetch appointments for this patient
-        const appointmentRes = await api.get(
-          `/appointments?patient_id=${patientId}`,
-        );
-        const appointmentList =
-          appointmentRes.data.appointments || appointmentRes.data;
+        const appointmentRes = await api.get(`/appointments?patient_id=${patientId}`);
+        const appointmentList = appointmentRes.data.appointments || appointmentRes.data;
         setAppointments(appointmentList);
       } catch (err) {
         console.error("Error fetching data", err);
@@ -32,8 +42,6 @@ function PatientDashboard() {
     };
 
     fetchData();
-
-    // ✅ Optional: auto-refresh every 10 seconds
     const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, [patientId]);
@@ -43,7 +51,6 @@ function PatientDashboard() {
       alert("Patient ID missing. Please login again.");
       return;
     }
-
     try {
       await api.post("/appointments", {
         patient_id: patientId,
@@ -52,20 +59,14 @@ function PatientDashboard() {
         time,
         description,
       });
-
       setDoctorId("");
       setDate("");
       setTime("");
       setDescription("");
-
       const res = await api.get(`/appointments?patient_id=${patientId}`);
       setAppointments(res.data);
     } catch (err) {
-      if (err.response && err.response.data.error) {
-        alert(err.response.data.error); // shows "This doctor is already booked..."
-      } else {
-        console.error("Error booking appointment", err);
-      }
+      console.error("Error booking appointment", err);
     }
   };
 
@@ -99,97 +100,136 @@ function PatientDashboard() {
   };
 
   return (
-    <div>
-      <h2>Patient Dashboard</h2>
-      <h3>Book Appointment</h3>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h4" gutterBottom color="primary">
+        Patient Dashboard
+      </Typography>
 
-      <div>
-        <label>Select Doctor:</label>
-        <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
-          <option value="">-- Select Doctor --</option>
-          {Array.isArray(doctors) &&
-            doctors.map((doc) => (
-              <option key={doc.doctor_id} value={doc.doctor_id}>
-                {doc.name} ({doc.specialization})
-              </option>
-            ))}
-        </select>
+      {/* Chatbot Access */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6">Chatbot</Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Ask health questions and book appointments via chatbot.
+          </Typography>
+          <Button variant="contained" onClick={() => (window.location.href = "/chatbot")}>
+            Open Chatbot
+          </Button>
+        </CardContent>
+      </Card>
 
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
-        <input
-          type="time"
-          value={time}
-          onChange={(e) => setTime(e.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="Reason for visit"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
+      {/* Appointment Booking Form */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6">Book Appointment</Typography>
+          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mt: 2 }}>
+            <Select
+              value={doctorId}
+              onChange={(e) => setDoctorId(e.target.value)}
+              displayEmpty
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value="">-- Select Doctor --</MenuItem>
+              {Array.isArray(doctors) &&
+                doctors.map((doc) => (
+                  <MenuItem key={doc.doctor_id} value={doc.doctor_id}>
+                    {doc.name} ({doc.specialization})
+                  </MenuItem>
+                ))}
+            </Select>
+            <TextField
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+            <TextField
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+            />
+            <TextField
+              placeholder="Reason for visit"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              sx={{ flexGrow: 1 }}
+            />
+            <Button variant="contained" color="success" onClick={bookAppointment}>
+              Book
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
 
-        <button onClick={bookAppointment}>Book Appointment</button>
-      </div>
-
-      <h3>My Appointments</h3>
-      <table border="1" style={{ marginTop: "10px" }}>
-        <thead>
-          <tr>
-            <th>Doctor</th>
-            <th>Date</th>
-            <th>Time</th>
-            <th>Description</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {appointments.map((appt) => (
-            <tr key={appt.appointment_id}>
-              <td>
-                {appt.doctor_id} - {appt.doctor_name}
-              </td>
-              <td>
-                <input
-                  type="date"
-                  defaultValue={appt.date}
-                  onChange={(e) => (appt.newDate = e.target.value)}
-                />
-              </td>
-              <td>
-                <input
-                  type="time"
-                  defaultValue={appt.time}
-                  onChange={(e) => (appt.newTime = e.target.value)}
-                />
-              </td>
-              <td>
-                <input
-                  type="text"
-                  defaultValue={appt.description}
-                  onChange={(e) => (appt.newDescription = e.target.value)}
-                />
-              </td>
-              <td>{appt.status || "Pending"}</td>
-              <td>
-                <button
-                  onClick={() => updateAppointment(appt.appointment_id, appt)}
-                >
-                  Update
-                </button>
-                <button onClick={() => deleteAppointment(appt.appointment_id)}>
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      {/* Appointment List */}
+      <Card>
+        <CardContent>
+          <Typography variant="h6">My Appointments</Typography>
+          <Paper sx={{ mt: 2 }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Doctor</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Time</TableCell>
+                  <TableCell>Description</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {appointments.map((appt) => (
+                  <TableRow key={appt.appointment_id}>
+                    <TableCell>
+                      {appt.doctor_name} ({appt.specialization})
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="date"
+                        defaultValue={appt.date}
+                        onChange={(e) => (appt.newDate = e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        type="time"
+                        defaultValue={appt.time}
+                        onChange={(e) => (appt.newTime = e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <TextField
+                        defaultValue={appt.description}
+                        onChange={(e) => (appt.newDescription = e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell>{appt.status || "Pending"}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        onClick={() => updateAppointment(appt.appointment_id, appt)}
+                      >
+                        Update
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        sx={{ ml: 1 }}
+                        onClick={() => deleteAppointment(appt.appointment_id)}
+                      >
+                        Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
+        </CardContent>
+      </Card>
+    </Box>
   );
 }
 

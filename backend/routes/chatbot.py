@@ -8,7 +8,7 @@ from models.appointment import Appointment
 from extensions import db
 import traceback
 import dateparser
-
+from flask_jwt_extended import jwt_required, get_jwt_identity
 chatbot_bp = Blueprint("chatbot", __name__)
 
 # --- Doctor recommendation mapping ---
@@ -29,6 +29,7 @@ doctor_recommendations = {
 rf_model = joblib.load("models/random_forest.pkl")
 label_encoder = joblib.load("models/label_encoder.pkl")
 symptom_columns = joblib.load("models/symptom_columns.pkl")
+
 
 # --- Load doctor response model ---
 try:
@@ -238,32 +239,74 @@ def get_available_slots(doctor_id, date=None):
     all_slots = [f"{hour:02d}:00" for hour in range(9, 17)]
     return [slot for slot in all_slots if slot not in booked_times]
 
+# --- Booking Appointntments ---
+from models.patient import Patient
+
+@chatbot_bp.route("/appointments/book", methods=["POST"])
+@jwt_required()
+def book_slot():
+    try:
+        data = request.get_json(force=True)
+        doctor_name = data.get("doctorName")
+        specialization = data.get("specialization")
+        slot = data.get("slot")
+
+        # JWT gives you user_id
+        user_id = get_jwt_identity()
+
+        # Look up the patient record for this user
+        patient = Patient.query.filter_by(user_id=user_id).first()
+        if not patient:
+            return jsonify({"success": False, "message": "Patient record not found"}), 400
+
+        doctor = Doctor.query.filter_by(name=doctor_name, specialization=specialization).first()
+        if not doctor:
+            return jsonify({"success": False, "message": "Doctor not found"}), 404
+
+        slots = get_available_slots(doctor.doctor_id)
+        if slot not in slots:
+            return jsonify({"success": False, "message": "Slot already taken"}), 400
+
+        new_appt = Appointment(
+            patient_id=patient.patient_id,   # ✅ use patient.patient_id
+            doctor_id=doctor.doctor_id,
+            date=pd.Timestamp.today().strftime("%Y-%m-%d"),
+            time=slot,
+            description="Booked via chatbot",
+            status="Pending"
+        )
+        db.session.add(new_appt)
+        db.session.commit()
+
+        return jsonify({"success": True, "appointment_id": new_appt.appointment_id})
+    except Exception as e:
+        print("Error booking:", e)
+        return jsonify({"success": False, "message": "Internal error"}), 500
+
 # --- Chatbot route ---
 @chatbot_bp.route("/chatbot", methods=["POST"])
+@jwt_required()   # ✅ enforce login for chatbot access
 def chatbot():
     try:
         data = request.get_json(force=True)
         query = (data.get("query") or "").lower().strip()
-        patient_id = data.get("patient_id")
+        patient_id = get_jwt_identity()   # ✅ patient identity from JWT
         if not query:
             return jsonify({"error": "No query provided"}), 400
 
         disclaimer = "⚠️ Preliminary suggestions only, not a medical diagnosis."
         normalized_query = query.replace(" ", "_")
+        tokens = normalized_query.split("_")
 
-        # Track last doctor in this request
-        last_doctor = None
-
-        # --- Fallback check ---
+        # --- Step 1: Fallback dictionary ---
         for phrase, resp in fallback_responses.items():
-            if phrase in normalized_query:
+            if phrase in tokens or phrase in normalized_query:   # ✅ exact token match
                 advice = resp["advice"]
                 mapped_symptom = resp["mapped_symptom"]
                 doctor_name = resp["doctor"]
-                last_doctor = doctor_name   # ✅ store doctor
 
                 predictions = []
-                if mapped_symptom and len(query.split()) > 1:
+                if mapped_symptom:
                     predictions = predict_disease([mapped_symptom], threshold=40.0)
 
                 slots = []
@@ -279,9 +322,21 @@ def chatbot():
                     "available_slots": slots
                 })
 
-        # --- Doctor consultation intent ---
+        # --- Step 2: Doctor consultation intent ---
         if any(word in query for word in ["consult", "doctor", "specialist", "recommend"]):
-            doctors = Doctor.query.all()
+            # Try to detect specialization from query
+            matched_spec = None
+            for spec in doctor_recommendations.values():
+                if spec.lower() in query:
+                    matched_spec = spec
+                    break
+
+            if matched_spec:
+                doctors = Doctor.query.filter_by(specialization=matched_spec).all()
+            else:
+                # fallback: use last detected symptom mapping if available
+                doctors = Doctor.query.all()
+
             doctor_list = []
             for doc in doctors:
                 slots = get_available_slots(doc.doctor_id)
@@ -292,86 +347,48 @@ def chatbot():
                 })
 
             return jsonify({
-                "reply": f"Here is the list of available doctors you can consult.\n\n{disclaimer}",
+                "reply": f"Here are the doctors you can consult.\n\n{disclaimer}",
                 "doctors": doctor_list
             })
 
 
-        # --- Appointment booking intent ---
-        if "book" in query or "appointment" in query or "schedule" in query:
-            parsed = dateparser.parse(query)
-            chosen_date = None
-            chosen_time = None
-            if parsed:
-                chosen_date = parsed.strftime("%Y-%m-%d")
-                chosen_time = parsed.strftime("%H:%M")
-
-            for word in query.split():
-                if ":00" in word:
-                    chosen_time = word
-                    if not chosen_date:
-                        chosen_date = pd.Timestamp.today().strftime("%Y-%m-%d")
-
-            if not chosen_time:
-                return jsonify({"reply": "Please specify a valid time slot to book."})
-
-            doctor = Doctor.query.first()  # Replace with prediction → specialization mapping
-            if not doctor:
-                return jsonify({"reply": "No doctor available for booking."})
-
-            slots = get_available_slots(doctor.doctor_id, chosen_date)
-            if chosen_time not in slots:
-                return jsonify({
-                    "reply": f"Sorry, {chosen_time} on {chosen_date} is not available. Free slots: {slots}"
+        # --- Step 3: Symptom detection + prediction ---
+        detected_symptoms = [s for s in symptom_columns if any(t in s for t in tokens)]
+        if detected_symptoms:
+            predictions = predict_disease(detected_symptoms, threshold=30.0)
+            doctor_reply = generate_doctor_response(query, predictions)
+            results = []
+            for disease, conf in predictions:
+                if disease == "No clear prediction":
+                    continue
+                spec = doctor_recommendations.get(disease, "General Physician")
+                doc_obj = Doctor.query.filter_by(specialization=spec).first()
+                slots = get_available_slots(doc_obj.doctor_id) if doc_obj else []
+                results.append({
+                    "disease": disease,
+                    "confidence": conf,
+                    "recommended_specialist": spec,
+                    "available_slots": slots
                 })
-
-            new_appt = Appointment(
-                patient_id=patient_id,
-                doctor_id=doctor.doctor_id,
-                date=chosen_date,
-                time=chosen_time,
-                description=f"Booked via chatbot for query: {query}",
-                status="Pending"
-            )
-            db.session.add(new_appt)
-            db.session.commit()
-
             return jsonify({
-                "reply": f"✅ Appointment confirmed with Dr. {doctor.name} "
-                         f"({doctor.specialization}) on {chosen_date} at {chosen_time}.",
-                "appointment_id": new_appt.appointment_id,
-                "status": new_appt.status,
+                "predictions": results,
+                "reply": f"{doctor_reply}\n\n{disclaimer}"
+            })
+
+        # --- Step 4: Appointment booking intent ---
+        if "book" in query or "appointment" in query or "schedule" in query:
+            return jsonify({
+                "reply": "Please select a doctor and slot to book. Use the /appointments/book endpoint.",
+                "redirect": "/appointments/book",
                 "disclaimer": disclaimer
             })
 
-        # --- Prediction flow ---
-        symptoms_list = [s.strip().replace(" ", "_") for s in query.split()]
-        if len(symptoms_list) < 2:
-            return jsonify({
-                "reply": f"Your input is too vague. Please provide more symptoms for better suggestions.\n\n{disclaimer}",
-                "predictions": []
-            })
-
-        top_predictions = predict_disease(symptoms_list, threshold=40.0)
-        doctor_reply = generate_doctor_response(query, top_predictions)
-
-        results = []
-        for disease, conf in top_predictions:
-            if disease == "No clear prediction":
-                continue
-            spec = doctor_recommendations.get(disease, "General Physician")
-            doc_obj = Doctor.query.filter_by(specialization=spec).first()
-            slots = get_available_slots(doc_obj.doctor_id) if doc_obj else []
-            results.append({
-                "disease": disease,
-                "confidence": conf,
-                "recommended_specialist": spec,
-                "available_slots": slots
-            })
-
+        # --- Step 5: Default no match ---
         return jsonify({
-            "predictions": results,
-            "reply": f"{doctor_reply}\n\n{disclaimer}"
+            "predictions": [],
+            "reply": f"Your input didn’t match any known symptom. Please provide more details.\n\n{disclaimer}",
+            "recommended_doctor": None,
+            "available_slots": []
         })
 
     except Exception as e:

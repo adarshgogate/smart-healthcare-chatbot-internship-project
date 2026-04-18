@@ -16,7 +16,7 @@ app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])  # allow all origins by default
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Adarsh@localhost/healthcare_db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['JWT_SECRET_KEY'] = 'super-secret-key'
+app.config["JWT_SECRET_KEY"] = "super_secure_secret_key_with_at_least_32_chars"
 
 db.init_app(app)
 migrate.init_app(app, db)
@@ -24,7 +24,7 @@ bcrypt.init_app(app)
 jwt.init_app(app)
 
 # Load trained artifacts once
-svc_model = joblib.load("models/svc_model (3).pkl")
+svc_model = joblib.load("models/svc_model (1).pkl")
 vectorizer = joblib.load("models/vectorizer (3).pkl")
 
 # Register blueprints

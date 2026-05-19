@@ -8,6 +8,13 @@ from routes.patients import patients_bp
 from flask_cors import CORS
 import joblib
 # import logging
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv() 
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 # # Show errors but suppress request logs
 # logging.getLogger('werkzeug').setLevel(logging.ERROR)
@@ -36,4 +43,5 @@ app.register_blueprint(chatbot_bp)
 
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False)
+    print("Starting Flask server...")
+    app.run(host="127.0.0.1", port=5000, debug=True)

@@ -2,13 +2,16 @@ from flask import Blueprint, request, jsonify
 import numpy as np
 import joblib
 import pandas as pd
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+import json
+from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM
 from models.doctor import Doctor
 from models.appointment import Appointment
+from models.patient import Patient
 from extensions import db
 import traceback
-import dateparser
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from transformers import pipeline
+
 chatbot_bp = Blueprint("chatbot", __name__)
 
 # --- Doctor recommendation mapping ---
@@ -29,174 +32,20 @@ doctor_recommendations = {
 rf_model = joblib.load("models/random_forest.pkl")
 label_encoder = joblib.load("models/label_encoder.pkl")
 symptom_columns = joblib.load("models/symptom_columns.pkl")
+print("Loaded symptoms:", symptom_columns[:20])
 
+# --- Load Gen AI model ---
+import requests
 
-# --- Load doctor response model ---
-try:
-    tokenizer = AutoTokenizer.from_pretrained("./doctor_response_model", use_fast=False, legacy=False)
-    response_model = AutoModelForSeq2SeqLM.from_pretrained("./doctor_response_model")
-except Exception:
-    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base", use_fast=False, legacy=False)
-    response_model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-base")
+def get_gen_ai_response(prompt):
+    with open("ngrok_url.txt") as f:   # ✅ local file in backend folder
+        url = f.read().strip()
+    response = requests.post(f"{url}/chatbot", json={"prompt": prompt})
+    return response.json()["reply"]
 
-# --- Fallback dictionary ---
-fallback_responses = {
-    "fever": {
-        "advice": "Fever is usually a sign of infection. Stay hydrated, rest, and monitor your temperature.",
-        "mapped_symptom": "high_fever",
-        "doctor": "General Physician"
-    },
-    "mild_fever": {
-        "advice": "Mild fever can be caused by viral infections. Rest and monitor your temperature.",
-        "mapped_symptom": "mild_fever",
-        "doctor": "General Physician"
-    },
-    "cough": {
-        "advice": "Cough can be due to cold or flu. Drink warm fluids.",
-        "mapped_symptom": "cough",
-        "doctor": "Pulmonologist"
-    },
-    "sore_throat": {
-        "advice": "A sore throat is often due to infection. Gargle with salt water.",
-        "mapped_symptom": "throat_irritation",
-        "doctor": "ENT Specialist"
-    },
-    "runny_nose": {
-        "advice": "Runny nose is usually viral. Rest and use steam inhalation.",
-        "mapped_symptom": "runny_nose",
-        "doctor": "ENT Specialist"
-    },
-    "headache": {
-        "advice": "Headaches are often caused by stress or dehydration. Rest and hydrate.",
-        "mapped_symptom": "headache",
-        "doctor": "Neurologist"
-    },
-    "migraine": {
-        "advice": "Migraines can be severe. Avoid triggers and consult a neurologist if frequent.",
-        "mapped_symptom": "migraine",
-        "doctor": "Neurologist"
-    },
-    "chest_pain": {
-        "advice": "Chest pain can be serious. Seek immediate medical attention if severe.",
-        "mapped_symptom": "chest_pain",
-        "doctor": "Cardiologist"
-    },
-    "shortness_of_breath": {
-        "advice": "Shortness of breath can be serious. Seek medical care.",
-        "mapped_symptom": "breathlessness",
-        "doctor": "Pulmonologist"
-    },
-    "dizziness": {
-        "advice": "Dizziness can be due to dehydration. Sit down and hydrate.",
-        "mapped_symptom": "dizziness",
-        "doctor": "Neurologist"
-    },
-    "fatigue": {
-        "advice": "Fatigue can result from stress, poor sleep, or illness. Rest and monitor.",
-        "mapped_symptom": "fatigue",
-        "doctor": "General Physician"
-    },
-    "back_pain": {
-        "advice": "Back pain is commonly linked to posture. Stretch gently and rest.",
-        "mapped_symptom": "back_pain",
-        "doctor": "Orthopedic Specialist"
-    },
-    "joint_pain": {
-        "advice": "Joint pain may be due to arthritis or injury. Rest and consult a specialist if persistent.",
-        "mapped_symptom": "joint_pain",
-        "doctor": "Orthopedic Specialist"
-    },
-    "stomach_pain": {
-        "advice": "Stomach pain can have many causes, including indigestion or infection. Rest, hydrate, and consult a doctor if it persists.",
-        "mapped_symptom": "abdominal_pain",
-        "doctor": "Gastroenterologist"
-    },
-    "nausea": {
-        "advice": "Nausea may be due to food poisoning or viral infection. Rest and sip clear fluids.",
-        "mapped_symptom": "nausea",
-        "doctor": "General Physician"
-    },
-    "vomiting": {
-        "advice": "Vomiting can lead to dehydration. Drink fluids and seek care if persistent.",
-        "mapped_symptom": "vomiting",
-        "doctor": "General Physician"
-    },
-    "diarrhea": {
-        "advice": "Diarrhea may be caused by infection or food intolerance. Stay hydrated.",
-        "mapped_symptom": "diarrhea",
-        "doctor": "Gastroenterologist"
-    },
-    "constipation": {
-        "advice": "Constipation is often linked to diet. Increase fiber and fluids.",
-        "mapped_symptom": "constipation",
-        "doctor": "Gastroenterologist"
-    },
-    "skin_rash": {
-        "advice": "Skin rashes can be allergic or infectious. Avoid scratching and consult a dermatologist if severe.",
-        "mapped_symptom": "skin_rash",
-        "doctor": "Dermatologist"
-    },
-    "itching": {
-        "advice": "Itching may be due to allergies or skin irritation. Avoid scratching and use soothing lotion.",
-        "mapped_symptom": "itching",
-        "doctor": "Dermatologist"
-    },
-    "allergy": {
-        "advice": "Allergies can cause sneezing, itching, or rash. Avoid triggers and consult a doctor if severe.",
-        "mapped_symptom": "allergy",
-        "doctor": "Allergist"
-    },
-    "eye_pain": {
-        "advice": "Eye pain can result from strain. See an ophthalmologist if it persists.",
-        "mapped_symptom": "eye_pain",
-        "doctor": "Ophthalmologist"
-    },
-    "red_eye": {
-        "advice": "Red eyes may be due to infection or irritation. Avoid rubbing and consult a doctor if persistent.",
-        "mapped_symptom": "red_eye",
-        "doctor": "Ophthalmologist"
-    },
-    "insomnia": {
-        "advice": "Insomnia can be linked to stress. Practice good sleep hygiene.",
-        "mapped_symptom": "insomnia",
-        "doctor": "Psychiatrist"
-    },
-    "anxiety": {
-        "advice": "Anxiety can cause restlessness and worry. Practice relaxation techniques and consult a professional if severe.",
-        "mapped_symptom": "anxiety",
-        "doctor": "Psychiatrist"
-    },
-    "depression": {
-        "advice": "Depression can affect mood and energy. Seek support from a mental health professional.",
-        "mapped_symptom": "depression",
-        "doctor": "Psychiatrist"
-    },
-    "palpitations": {
-        "advice": "Heart palpitations may be due to stress or heart issues. Consult a cardiologist if frequent.",
-        "mapped_symptom": "palpitations",
-        "doctor": "Cardiologist"
-    },
-    "high_blood_pressure": {
-        "advice": "High blood pressure can be dangerous. Monitor regularly and consult a doctor.",
-        "mapped_symptom": "hypertension",
-        "doctor": "Cardiologist"
-    },
-    "diabetes": {
-        "advice": "Diabetes requires lifestyle management. Monitor blood sugar and consult an endocrinologist.",
-        "mapped_symptom": "diabetes",
-        "doctor": "Endocrinologist"
-    },
-    "asthma": {
-        "advice": "Asthma can cause breathing difficulty. Use prescribed inhalers and consult a pulmonologist.",
-        "mapped_symptom": "asthma",
-        "doctor": "Pulmonologist"
-    },
-    "arthritis": {
-        "advice": "Arthritis causes joint stiffness. Consult an orthopedic specialist for management.",
-        "mapped_symptom": "arthritis",
-        "doctor": "Orthopedic Specialist"
-    }
-}
+# --- Load book context ---
+with open("book_context.json", "r") as f:
+    book_context = json.load(f)
 
 # --- Prediction function ---
 def predict_disease(symptoms_list, threshold=20.0):
@@ -214,20 +63,41 @@ def predict_disease(symptoms_list, threshold=20.0):
     filtered = [(disease, conf) for disease, conf in zip(top_diseases, top_confidences) if conf >= threshold]
     return filtered if filtered else [("No clear prediction", 0.0)]
 
-# --- Doctor response generator ---
-def generate_doctor_response(symptoms_input, top_predictions):
-    if top_predictions[0][0] == "No clear prediction":
-        return "Your symptoms don’t strongly match any disease in my database. Please consult a professional."
+# --- Gen AI response with book context ---
+import json
+
+# Reload JSON so edits are always picked up
+with open("book_context.json") as f:
+    book_context = json.load(f)
     
-    preds_text = ", ".join([f"{disease} ({conf}%)" for disease, conf in top_predictions])
-    prompt = (
-        f"Patient symptoms: {symptoms_input}\n"
-        f"Top predicted diseases: {preds_text}\n\n"
-        "Now write a professional doctor's response advising rest and consultation."
-    )
-    inputs = tokenizer(prompt, return_tensors="pt")
-    outputs = response_model.generate(**inputs, max_new_tokens=150)
-    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+def generate_book_context_response(symptoms_input, top_predictions):
+    disclaimer = "⚠️ Preliminary suggestions only, not a medical diagnosis."
+
+    if not top_predictions or top_predictions[0][0] == "No clear prediction":
+        return f"Your symptoms don’t strongly match any disease in my database. Please consult a professional.\n\n{disclaimer}"
+
+    top_disease, confidence = top_predictions[0]
+    normalized_disease = top_disease.strip().title()
+
+    # --- Always use JSON advice if available ---
+    context = book_context.get(normalized_disease)
+    if context:
+        return f"{context}\n\n{disclaimer}"
+
+    # --- If no JSON entry, fallback to GenAI ---
+    prompt = f"""
+    Patient reports: {symptoms_input}.
+    Predicted condition: {normalized_disease} ({confidence}%).
+    Write a short, clear doctor-style advice (2–3 sentences).
+    """
+
+    try:
+        response = get_gen_ai_response(prompt)
+        return f"{response.strip()}\n\n{disclaimer}"
+    except Exception as e:
+        print("GenAI error:", e)
+        return f"⚠️ Unable to generate AI response at the moment. Please consult a doctor directly.\n\n{disclaimer}"
+
 
 # --- Available slots helper ---
 def get_available_slots(doctor_id, date=None):
@@ -239,9 +109,7 @@ def get_available_slots(doctor_id, date=None):
     all_slots = [f"{hour:02d}:00" for hour in range(9, 17)]
     return [slot for slot in all_slots if slot not in booked_times]
 
-# --- Booking Appointntments ---
-from models.patient import Patient
-
+# --- Booking Appointments ---
 @chatbot_bp.route("/appointments/book", methods=["POST"])
 @jwt_required()
 def book_slot():
@@ -251,10 +119,7 @@ def book_slot():
         specialization = data.get("specialization")
         slot = data.get("slot")
 
-        # JWT gives you user_id
         user_id = get_jwt_identity()
-
-        # Look up the patient record for this user
         patient = Patient.query.filter_by(user_id=user_id).first()
         if not patient:
             return jsonify({"success": False, "message": "Patient record not found"}), 400
@@ -268,7 +133,7 @@ def book_slot():
             return jsonify({"success": False, "message": "Slot already taken"}), 400
 
         new_appt = Appointment(
-            patient_id=patient.patient_id,   # ✅ use patient.patient_id
+            patient_id=patient.patient_id,
             doctor_id=doctor.doctor_id,
             date=pd.Timestamp.today().strftime("%Y-%m-%d"),
             time=slot,
@@ -285,78 +150,114 @@ def book_slot():
 
 # --- Chatbot route ---
 @chatbot_bp.route("/chatbot", methods=["POST"])
-@jwt_required()   # ✅ enforce login for chatbot access
+@jwt_required()
 def chatbot():
     try:
         data = request.get_json(force=True)
         query = (data.get("query") or "").lower().strip()
-        patient_id = get_jwt_identity()   # ✅ patient identity from JWT
         if not query:
             return jsonify({"error": "No query provided"}), 400
 
         disclaimer = "⚠️ Preliminary suggestions only, not a medical diagnosis."
-        normalized_query = query.replace(" ", "_")
-        tokens = normalized_query.split("_")
 
-        # --- Step 1: Fallback dictionary ---
-        for phrase, resp in fallback_responses.items():
-            if phrase in tokens or phrase in normalized_query:   # ✅ exact token match
-                advice = resp["advice"]
-                mapped_symptom = resp["mapped_symptom"]
-                doctor_name = resp["doctor"]
+        # --- Synonym dictionary ---
+        symptom_synonyms = {
+            "skin rash": "skin_rash",
+            "rash": "skin_rash",
+            "breathing problem": "shortness_of_breath",
+            "difficulty breathing": "shortness_of_breath",
+            "stomach ache": "stomach_pain",
+            "skin itching": "itching",
+            "stomach pain": "stomach_pain", 
+            "itching": "itching",
+            "acidity": "acidity",
+            "tiredness": "fatigue",
+            "shivering":"shivering",
+            "feeling weak": "fatigue",
+            "heart pain": "chest_pain",
+            "loose motion": "diarrhoea",
+            "constipated": "constipation",
+            "sadness": "depression",
+            "anxious": "anxiety",
+            "acidity problem": "acidity",
+            "skin rash": "skin_rash",
+            "rash": "skin_rash",
+            "stomach ache": "stomach_pain",
+            "heart pain": "chest_pain",
+            "weak": "fatigue"
+        }
 
-                predictions = []
-                if mapped_symptom:
-                    predictions = predict_disease([mapped_symptom], threshold=40.0)
+        # --- Normalize multi-word phrases BEFORE splitting ---
+        for phrase, mapped in symptom_synonyms.items():
+            if phrase in query:
+                query = query.replace(phrase, mapped)
 
-                slots = []
-                if doctor_name:
-                    doctor = Doctor.query.filter_by(specialization=doctor_name).first()
-                    if doctor:
-                        slots = get_available_slots(doctor.doctor_id)
+        tokens = query.split()  # keep words separated
+        normalized_tokens = [symptom_synonyms.get(token, token) for token in tokens]
 
+
+        # --- Detect symptoms ---
+        from difflib import get_close_matches
+
+        # --- Detect symptoms with fuzzy matching ---
+        detected_symptoms = []
+        for token in normalized_tokens:
+            # strip filler words like "problem", "issue", "pain", "ache"
+            if token in {"problem", "issue", "pain", "ache"}:
+                continue
+
+            # try exact match first
+            if token in symptom_columns:
+                detected_symptoms.append(token)
+                continue
+
+            # fuzzy match for spelling mistakes / variants
+            match = get_close_matches(token, symptom_columns, n=1, cutoff=0.8)
+            if match:
+                detected_symptoms.append(match[0])
+
+        print("User tokens:", tokens)
+        print("Normalized tokens:", normalized_tokens)
+        print("Detected symptoms:", detected_symptoms)
+
+        if detected_symptoms:
+            predictions = predict_disease(detected_symptoms, threshold=20.0)
+
+            # --- Knowledge-aware fallback ---
+            if predictions[0][0] == "No clear prediction":
+                # Use detected symptoms + knowledge file + GenAI
+                symptom = detected_symptoms[0]
+                context = book_context.get(symptom, "No extra context available.")
+                prompt = f"""
+                Patient query: {query}
+                Symptoms detected: {detected_symptoms}
+                Knowledge: {context}
+                Generate a professional doctor's response with advice.
+                """
+                doctor_reply = get_gen_ai_response(prompt)
                 return jsonify({
-                    "predictions": [{"disease": d, "confidence": c} for d, c in predictions] if predictions else [],
-                    "reply": f"{advice}\n\n{disclaimer}",
-                    "recommended_doctor": doctor_name,
-                    "available_slots": slots
+                    "predictions": [],
+                    "reply": f"{doctor_reply}\n\n{disclaimer}",
+                    "recommended_doctor": None,
+                    "available_slots": []
                 })
 
-        # --- Step 2: Doctor consultation intent ---
-        if any(word in query for word in ["consult", "doctor", "specialist", "recommend"]):
-            # Try to detect specialization from query
-            matched_spec = None
-            for spec in doctor_recommendations.values():
-                if spec.lower() in query:
-                    matched_spec = spec
+            # --- Normal flow with predictions ---
+            doctor_reply = generate_book_context_response(query, predictions)
+
+           # ✅ Symptom-level fallback: check both lowercase and Title case keys
+            for symptom in detected_symptoms:
+                key_lower = symptom.lower()
+                key_title = symptom.strip().title()
+
+                if key_lower in book_context:
+                    doctor_reply = f"{book_context[key_lower]}\n\n{disclaimer}"
+                    break
+                elif key_title in book_context:
+                    doctor_reply = f"{book_context[key_title]}\n\n{disclaimer}"
                     break
 
-            if matched_spec:
-                doctors = Doctor.query.filter_by(specialization=matched_spec).all()
-            else:
-                # fallback: use last detected symptom mapping if available
-                doctors = Doctor.query.all()
 
-            doctor_list = []
-            for doc in doctors:
-                slots = get_available_slots(doc.doctor_id)
-                doctor_list.append({
-                    "name": doc.name,
-                    "specialization": doc.specialization,
-                    "available_slots": slots
-                })
-
-            return jsonify({
-                "reply": f"Here are the doctors you can consult.\n\n{disclaimer}",
-                "doctors": doctor_list
-            })
-
-
-        # --- Step 3: Symptom detection + prediction ---
-        detected_symptoms = [s for s in symptom_columns if any(t in s for t in tokens)]
-        if detected_symptoms:
-            predictions = predict_disease(detected_symptoms, threshold=30.0)
-            doctor_reply = generate_doctor_response(query, predictions)
             results = []
             for disease, conf in predictions:
                 if disease == "No clear prediction":
@@ -368,22 +269,17 @@ def chatbot():
                     "disease": disease,
                     "confidence": conf,
                     "recommended_specialist": spec,
+                    "doctor_name": doc_obj.name if doc_obj else None,
                     "available_slots": slots
                 })
+
             return jsonify({
                 "predictions": results,
-                "reply": f"{doctor_reply}\n\n{disclaimer}"
+                "reply": doctor_reply   # ✅ no extra disclaimer here
             })
 
-        # --- Step 4: Appointment booking intent ---
-        if "book" in query or "appointment" in query or "schedule" in query:
-            return jsonify({
-                "reply": "Please select a doctor and slot to book. Use the /appointments/book endpoint.",
-                "redirect": "/appointments/book",
-                "disclaimer": disclaimer
-            })
 
-        # --- Step 5: Default no match ---
+        # --- No symptoms detected ---
         return jsonify({
             "predictions": [],
             "reply": f"Your input didn’t match any known symptom. Please provide more details.\n\n{disclaimer}",

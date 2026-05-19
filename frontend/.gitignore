@@ -7,11 +7,44 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+<<<<<<< HEAD
 node_modules
 dist
 dist-ssr
 *.local
 
+=======
+# Node.js / React
+**/node_modules/
+**/build/
+**/dist/
+dist-ssr
+*.local
+
+# Python / Django
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Uploads / datasets
+uploads/
+*.csv
+*.json
+*.zip
+*.tar
+*.gz
+
+>>>>>>> aab9f724c93727f707ed4b17b289044f3e6a5089
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

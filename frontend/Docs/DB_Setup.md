@@ -27,6 +27,9 @@ Prompt changes to:
 healthcare_db=#
 ```
 
+venv\Scripts\activate
+
+
 ---
 
 ### 3. Verify Database

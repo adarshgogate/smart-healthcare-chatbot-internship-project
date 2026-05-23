@@ -11,9 +11,8 @@ import joblib
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
+from services.openai_client import client
 
-load_dotenv() 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 # # Show errors but suppress request logs

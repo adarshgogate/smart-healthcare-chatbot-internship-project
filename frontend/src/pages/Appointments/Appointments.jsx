@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import api from "../api/axios";
 
-function Appointments() {
+function Appointments({ chatbotResponse }) {
   const [appointments, setAppointments] = useState([]);
   const [patientId, setPatientId] = useState("");
   const [doctorId, setDoctorId] = useState("");
   const [date, setDate] = useState("");
+  const [message, setMessage] = useState("");
 
   // Fetch appointments on load
   useEffect(() => {
@@ -21,6 +22,7 @@ function Appointments() {
     }
   };
 
+  // Manual booking (existing flow)
   const addAppointment = async () => {
     try {
       await api.post("/appointments", {
@@ -34,6 +36,29 @@ function Appointments() {
       fetchAppointments(); // refresh list
     } catch (err) {
       console.error("Error adding appointment", err);
+    }
+  };
+
+  // Booking directly from chatbot suggestions
+  const bookFromChatbot = async (doctorName, specialization, slot) => {
+    try {
+      const res = await api.post("/appointments/book", {
+        doctorName,
+        specialization,
+        slot
+      }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      });
+
+      if (res.data.success) {
+        setMessage(`✅ Appointment booked! ID: ${res.data.appointment_id}`);
+        fetchAppointments();
+      } else {
+        setMessage(`⚠️ ${res.data.message}`);
+      }
+    } catch (err) {
+      console.error("Error booking appointment", err);
+      setMessage("❌ Error booking appointment");
     }
   };
 
@@ -59,6 +84,7 @@ function Appointments() {
     <div>
       <h3>Manage Appointments</h3>
 
+      {/* Manual booking form */}
       <div>
         <input
           type="text"
@@ -80,7 +106,33 @@ function Appointments() {
         <button onClick={addAppointment}>Book Appointment</button>
       </div>
 
-      <table border="1" style={{ marginTop: "10px" }}>
+      {/* Chatbot suggestions section */}
+      {chatbotResponse && chatbotResponse.predictions && (
+        <div style={{ marginTop: "20px" }}>
+          <h4>Chatbot Suggestions</h4>
+          <p>{chatbotResponse.reply}</p>
+          {chatbotResponse.predictions.map((pred, idx) => (
+            <div key={idx} style={{ marginBottom: "1rem" }}>
+              <strong>{pred.disease} ({pred.confidence}%)</strong>
+              <p>Doctor: {pred.doctor_name} ({pred.recommended_specialist})</p>
+              <div>
+                {pred.available_slots.map(slot => (
+                  <button
+                    key={slot}
+                    onClick={() => bookFromChatbot(pred.doctor_name, pred.recommended_specialist, slot)}
+                  >
+                    Book {slot}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {message && <p>{message}</p>}
+        </div>
+      )}
+
+      {/* Appointment list */}
+      <table border="1" style={{ marginTop: "20px" }}>
         <thead>
           <tr>
             <th>Patient ID</th>
@@ -99,10 +151,10 @@ function Appointments() {
               <td>{appt.status}</td>
               <td>
                 <button onClick={() => deleteAppointment(appt.id)}>Cancel</button>
-                <button onClick={() => updateAppointment(appt.id, "confirmed")}>
+                <button onClick={() => updateAppointment(appt.id, "Confirmed")}>
                   Confirm
                 </button>
-                <button onClick={() => updateAppointment(appt.id, "completed")}>
+                <button onClick={() => updateAppointment(appt.id, "Completed")}>
                   Complete
                 </button>
               </td>

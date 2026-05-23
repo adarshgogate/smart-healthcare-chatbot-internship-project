@@ -32,6 +32,7 @@ function Chatbot() {
     severity: "success",
   });
   const [loadingSlot, setLoadingSlot] = useState(null);
+
   const handleBookAppointment = async (doctor, slot) => {
     try {
       setLoadingSlot(slot);
@@ -43,32 +44,11 @@ function Chatbot() {
 
       if (res.data.success) {
         setMessages((prev) =>
-          prev
-            .map((msg) => {
-              if (msg.sender === "doctorList") {
-                return {
-                  ...msg,
-                  doctors: msg.doctors.map((d) =>
-                    d.name === doctor.name
-                      ? {
-                          ...d,
-                          available_slots: d.available_slots.filter(
-                            (s) => s !== slot,
-                          ),
-                          booked_slots: [...(d.booked_slots || []), slot],
-                        }
-                      : d,
-                  ),
-                };
-              }
-              return msg;
-            })
-            .concat({
-              sender: "bot",
-              text: `📌 Appointment request sent to ${doctor.name} at ${slot}. Awaiting doctor confirmation.`,
-            }),
+          prev.concat({
+            sender: "bot",
+            text: `📌 Appointment request sent to ${doctor.name} at ${slot}. Awaiting doctor confirmation.`,
+          }),
         );
-
         setSnackbar({
           open: true,
           message: `Appointment booked with ${doctor.name} at ${slot}`,
@@ -105,22 +85,20 @@ function Chatbot() {
 
     try {
       const res = await api.post("/chatbot", { query });
+      console.log("Backend response received:", res.data);
+
       const predictions = res.data.predictions || [];
+      const results = res.data.results || [];
       const botReply = res.data.reply || "Sorry, I didn’t understand that.";
-      const doctors = res.data.doctors || [];
 
       setMessages((prev) => prev.filter((m) => m.text !== "Bot is typing..."));
       setMessages((prev) => [...prev, { sender: "bot", text: botReply }]);
 
-      if (
-        predictions.length > 0 &&
-        predictions[0].disease !== "No clear prediction"
-      ) {
+      if (predictions.length > 0) {
         setMessages((prev) => [...prev, { sender: "prediction", predictions }]);
       }
-
-      if (doctors.length > 0) {
-        setMessages((prev) => [...prev, { sender: "doctorList", doctors }]);
+      if (results.length > 0) {
+        setMessages((prev) => [...prev, { sender: "doctorList", results }]);
       }
     } catch (err) {
       console.error("Chatbot error", err);
@@ -157,40 +135,45 @@ function Chatbot() {
             return (
               <Box key={idx} sx={{ mb: 2 }}>
                 <Typography variant="subtitle1" gutterBottom>
-                  👨‍⚕️ Available Doctors:
+                  👨‍⚕️ Recommended Doctors:
                 </Typography>
-                {msg.doctors.map((doc, i) => (
+                {msg.results.map((p, i) => (
                   <Card key={i} sx={{ mb: 2 }}>
                     <CardHeader
-                      avatar={<Avatar>{doc.name?.[0] || "?"}</Avatar>}
-                      title={doc.name || "Unknown Doctor"}
+                      avatar={<Avatar>{p.doctor_name?.[0] || "?"}</Avatar>}
+                      title={p.doctor_name || "General Physician"}
                       subheader={
-                        doc.specialization || "Specialization not available"
+                        p.recommended_specialist ||
+                        "Specialization not available"
                       }
                     />
                     <CardContent
                       sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}
                     >
-                      {(doc.available_slots || []).map((slot, j) => {
-                        const isTaken = doc.booked_slots?.includes(slot);
-                        return (
-                          <Button
-                            key={j}
-                            variant="outlined"
-                            color={isTaken ? "error" : "success"}
-                            size="small"
-                            disabled={isTaken || loadingSlot === slot}
-                            sx={{ opacity: isTaken ? 0.5 : 1, borderRadius: 2 }}
-                            onClick={() => handleBookAppointment(doc, slot)}
-                          >
-                            {loadingSlot === slot ? (
-                              <CircularProgress size={18} />
-                            ) : (
-                              slot
-                            )}
-                          </Button>
-                        );
-                      })}
+                      {(p.available_slots || []).map((slot, j) => (
+                        <Button
+                          key={j}
+                          variant="outlined"
+                          color="success"
+                          size="small"
+                          disabled={loadingSlot === slot}
+                          onClick={() =>
+                            handleBookAppointment(
+                              {
+                                name: p.doctor_name,
+                                specialization: p.recommended_specialist,
+                              },
+                              slot,
+                            )
+                          }
+                        >
+                          {loadingSlot === slot ? (
+                            <CircularProgress size={18} />
+                          ) : (
+                            slot
+                          )}
+                        </Button>
+                      ))}
                     </CardContent>
                   </Card>
                 ))}
@@ -235,12 +218,6 @@ function Chatbot() {
                 }}
               >
                 <Typography variant="body1">{msg.text}</Typography>
-                {msg.sender === "bot" &&
-                  !msg.text.includes("Preliminary suggestions") && (
-                    <Typography variant="caption" color="text.secondary">
-                      ⚠️ Preliminary suggestions only, not a medical diagnosis.
-                    </Typography>
-                  )}
               </Paper>
             );
           }

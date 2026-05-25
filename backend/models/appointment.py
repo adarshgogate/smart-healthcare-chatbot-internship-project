@@ -18,10 +18,16 @@ class Appointment(db.Model):
         return {
             "appointment_id": self.appointment_id,
             "patient_id": self.patient_id,
+            "patient_name": self.patient.name if self.patient else None,
+            "patient_email": self.patient.email if self.patient else None,
+            "patient_age": self.patient.age if self.patient else None,
+            "patient_gender": self.patient.gender if self.patient else None,
             "doctor_id": self.doctor_id,
             "doctor_name": self.doctor.name if self.doctor else None,
+            "doctor_specialization": self.doctor.specialization if self.doctor else None,
             "date": str(self.date),
             "time": str(self.time),
             "description": self.description,
             "status": self.status
         }
+

@@ -5,6 +5,7 @@ from routes.doctors import doctors_bp
 from routes.chatbot import chatbot_bp
 from routes.appointments import appointments_bp
 from routes.patients import patients_bp
+from routes.admin import admin_bp 
 from flask_cors import CORS
 import joblib
 # import logging
@@ -39,7 +40,7 @@ app.register_blueprint(patients_bp)
 app.register_blueprint(doctors_bp)
 app.register_blueprint(appointments_bp)
 app.register_blueprint(chatbot_bp)
-
+app.register_blueprint(admin_bp)
 
 if __name__ == "__main__":
     print("Starting Flask server...")

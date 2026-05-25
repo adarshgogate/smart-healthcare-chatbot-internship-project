@@ -51,11 +51,13 @@ function Appointments({ chatbotResponse }) {
       });
 
       if (res.data.success) {
-        setMessage(`✅ Appointment booked! ID: ${res.data.appointment_id}`);
+        setMessage(`📌 Appointment request sent to ${doctorName} for ${slot}. Awaiting doctor approval.`);
         fetchAppointments();
       } else {
         setMessage(`⚠️ ${res.data.message}`);
       }
+
+
     } catch (err) {
       console.error("Error booking appointment", err);
       setMessage("❌ Error booking appointment");
@@ -116,14 +118,32 @@ function Appointments({ chatbotResponse }) {
               <strong>{pred.disease} ({pred.confidence}%)</strong>
               <p>Doctor: {pred.doctor_name} ({pred.recommended_specialist})</p>
               <div>
-                {pred.available_slots.map(slot => (
-                  <button
-                    key={slot}
-                    onClick={() => bookFromChatbot(pred.doctor_name, pred.recommended_specialist, slot)}
-                  >
-                    Book {slot}
-                  </button>
-                ))}
+                {(pred.available_slots.concat(pred.booked_slots) || []).map(slot => {
+                  const isBooked = (pred.booked_slots || []).includes(slot);
+                  return (
+                    <button
+                      key={slot}
+                      onClick={() =>
+                        !isBooked &&
+                        bookFromChatbot(pred.doctor_name, pred.recommended_specialist, slot)
+                      }
+                      disabled={isBooked}
+                      style={{
+                        marginRight: "8px",
+                        opacity: isBooked ? 0.5 : 1,
+                        cursor: isBooked ? "not-allowed" : "pointer",
+                        backgroundColor: isBooked ? "#f87171" : "#10b981",
+                        color: "white",
+                        padding: "6px 12px",
+                        border: "none",
+                        borderRadius: "4px"
+                      }}
+                    >
+                      🕐 {slot}
+                    </button>
+                  );
+                })}
+
               </div>
             </div>
           ))}

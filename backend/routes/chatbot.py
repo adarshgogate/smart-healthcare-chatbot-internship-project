@@ -59,7 +59,7 @@ symptom_to_specialist = {
 rf_model = joblib.load("models/random_forest (6).pkl")
 label_encoder = joblib.load("models/label_encoder (6).pkl")
 symptom_columns = joblib.load("models/symptom_columns (6).pkl")
-print("Loaded symptoms:", symptom_columns[:20])
+print("Loaded symptoms:", symptom_columns[:50])
 
 # # --- Load Gen AI model ---
 # import requests
@@ -226,6 +226,7 @@ def book_slot():
 def chatbot():
     try:
         data = request.get_json(force=True)
+        print("Received chatbot request:", data)   # ✅ add this line
         query = (data.get("query") or "").lower().strip()
         if not query:
             return jsonify({"error": "No query provided"}), 400
@@ -315,8 +316,9 @@ def chatbot():
 
         # --- Normalize multi-word phrases BEFORE splitting ---
         for phrase, mapped in symptom_synonyms.items():
-            if phrase in query:
-                query = query.replace(phrase, mapped)
+            if phrase in query.lower():
+                query = query.lower().replace(phrase, mapped)
+
 
         tokens = query.split()
         normalized_tokens = [symptom_synonyms.get(token, token) for token in tokens]
@@ -335,6 +337,10 @@ def chatbot():
                 detected_symptoms.append(match[0])
 
         # ✅ Only one clean log line
+        print("Tokens:", tokens)
+        print("Normalized tokens:", normalized_tokens)
+        print("Detected symptoms:", detected_symptoms)
+
         print("🔍 Detected symptoms:", detected_symptoms)
 
         if detected_symptoms:
@@ -422,11 +428,12 @@ def chatbot():
 
         # --- No symptoms detected ---
         return jsonify({
-            "predictions": [],
-            "reply": f"Your input didn’t match any known symptom. Please provide more details.\n\n{disclaimer}",
-            "recommended_doctor": None,
-            "available_slots": []
-        })
+        "predictions": [],
+        "reply": f"Your input didn’t match any known symptom. Please provide more details.\n\n{disclaimer}",
+        "recommended_doctor": "General Physician",
+        "available_slots": []
+        }), 200
+
 
     except Exception as e:
         print("❌ Error:", e)

@@ -88,15 +88,29 @@ def login():
             expires_delta=datetime.timedelta(hours=1)
         )
 
-        # Role-specific lookup
+            # Role-specific lookup
         if user.role == "doctor":
             doctor = Doctor.query.filter_by(user_id=user.id).first()
-            role_id = doctor.doctor_id if doctor else None   # ✅ use doctor_id
+            role_id = doctor.doctor_id if doctor else None
         elif user.role == "patient":
             patient = Patient.query.filter_by(user_id=user.id).first()
-            role_id = patient.patient_id if patient else None   # ✅ use patient_id
+            role_id = patient.patient_id if patient else None
         else:
             role_id = None
+
+        # ✅ Include role_id in JWT identity
+        access_token = create_access_token(
+        identity=str(user.id),   # always a string
+        additional_claims={
+            "username": user.username,
+            "role": user.role,
+            "role_id": role_id
+        },
+        expires_delta=datetime.timedelta(hours=1)
+    )
+
+
+
 
         return jsonify({
             "access_token": access_token,
@@ -104,6 +118,7 @@ def login():
             "role": user.role,
             "role_id": role_id
         }), 200
+
 
     return jsonify({"message": "Invalid credentials"}), 401
 
@@ -128,10 +143,12 @@ def patient_only():
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
 def me():
-    identity = get_jwt_identity()   # user id
-    claims = get_jwt()              # extra claims
+    user_id = int(get_jwt_identity())   # convert back to int
+    claims = get_jwt()
     return jsonify({
-        "id": identity,
+        "id": user_id,
         "username": claims.get("username"),
-        "role": claims.get("role")
+        "role": claims.get("role"),
+        "role_id": claims.get("role_id")
     })
+

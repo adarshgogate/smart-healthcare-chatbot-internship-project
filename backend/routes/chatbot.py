@@ -181,44 +181,44 @@ def get_available_slots(doctor_id, date=None):
     all_slots = [f"{hour:02d}:00" for hour in range(9, 17)]
     return [slot for slot in all_slots if slot not in booked_times]
 
-# --- Booking Appointments ---
-@chatbot_bp.route("/appointments/book", methods=["POST"])
-@jwt_required()
-def book_slot():
-    try:
-        data = request.get_json(force=True)
-        doctor_name = data.get("doctorName")
-        specialization = data.get("specialization")
-        slot = data.get("slot")
+# # --- Booking Appointments ---
+# @chatbot_bp.route("/appointments/book", methods=["POST"])
+# @jwt_required()
+# def book_slot():
+#     try:
+#         data = request.get_json(force=True)
+#         doctor_name = data.get("doctorName")
+#         specialization = data.get("specialization")
+#         slot = data.get("slot")
 
-        user_id = get_jwt_identity()
-        patient = Patient.query.filter_by(user_id=user_id).first()
-        if not patient:
-            return jsonify({"success": False, "message": "Patient record not found"}), 400
+#         user_id = get_jwt_identity()
+#         patient = Patient.query.filter_by(user_id=user_id).first()
+#         if not patient:
+#             return jsonify({"success": False, "message": "Patient record not found"}), 400
 
-        doctor = Doctor.query.filter_by(name=doctor_name, specialization=specialization).first()
-        if not doctor:
-            return jsonify({"success": False, "message": "Doctor not found"}), 404
+#         doctor = Doctor.query.filter_by(name=doctor_name, specialization=specialization).first()
+#         if not doctor:
+#             return jsonify({"success": False, "message": "Doctor not found"}), 404
 
-        slots = get_available_slots(doctor.doctor_id)
-        if slot not in slots:
-            return jsonify({"success": False, "message": "Slot already taken"}), 400
+#         slots = get_available_slots(doctor.doctor_id)
+#         if slot not in slots:
+#             return jsonify({"success": False, "message": "Slot already taken"}), 400
 
-        new_appt = Appointment(
-            patient_id=patient.patient_id,
-            doctor_id=doctor.doctor_id,
-            date=pd.Timestamp.today().strftime("%Y-%m-%d"),
-            time=slot,
-            description="Booked via chatbot",
-            status="Pending"
-        )
-        db.session.add(new_appt)
-        db.session.commit()
+#         new_appt = Appointment(
+#             patient_id=patient.patient_id,
+#             doctor_id=doctor.doctor_id,
+#             date=pd.Timestamp.today().strftime("%Y-%m-%d"),
+#             time=slot,
+#             description="Booked via chatbot",
+#             status="Pending"
+#         )
+#         db.session.add(new_appt)
+#         db.session.commit()
 
-        return jsonify({"success": True, "appointment_id": new_appt.appointment_id})
-    except Exception as e:
-        print("Error booking:", e)
-        return jsonify({"success": False, "message": "Internal error"}), 500
+#         return jsonify({"success": True, "appointment_id": new_appt.appointment_id})
+#     except Exception as e:
+#         print("Error booking:", e)
+#         return jsonify({"success": False, "message": "Internal error"}), 500
     
 # --- Chatbot route ---
 @chatbot_bp.route("/chatbot", methods=["POST"])
@@ -247,10 +247,12 @@ def chatbot():
                         "disease": disease.title(),
                         "confidence": 100.0,
                         "recommended_specialist": spec,
+                        "doctor_id": doc_obj.doctor_id if doc_obj else None,   # ✅ added
                         "doctor_name": doc_obj.name if doc_obj else "General Physician",
                         "available_slots": slots
                     }]
                 })
+
 
          # --- Synonym dictionary ---
         symptom_synonyms = {
@@ -404,6 +406,7 @@ def chatbot():
                     "disease": disease,
                     "confidence": conf,
                     "recommended_specialist": spec,
+                    "doctor_id": doc_obj.doctor_id, 
                     "doctor_name": doc_obj.name if doc_obj else "General Physician",
                     "available_slots": slots
                 })

@@ -43,10 +43,13 @@ def add_appointment():
     # Resolve doctor_id by specialty if provided
     doctor_id = data.get('doctor_id')
     if not doctor_id and data.get('doctor_specialty'):
-        doctor = Doctor.query.filter_by(specialty=data['doctor_specialty']).first()
+        doctor_id = data.get("doctor_id")
+        specialization = data.get("specialization")
+
+        doctor = Doctor.query.filter_by(doctor_id=doctor_id, specialization=specialization).first()
         if not doctor:
-            return jsonify({"success": False, "message": "No doctor available for this specialty"}), 404
-        doctor_id = doctor.doctor_id
+            return jsonify({"success": False, "message": "Doctor not found"}), 404
+
 
     # Prevent double booking (manual check)
     existing = Appointment.query.filter_by(
@@ -87,7 +90,7 @@ def add_appointment():
 @jwt_required()
 def book_appointment():
     data = request.get_json(force=True)
-    doctor_name = data.get("doctorName")
+    doctor_id = data.get("doctor_id")
     specialization = data.get("specialization")
     slot = data.get("slot")
 
@@ -96,7 +99,8 @@ def book_appointment():
     if not patient:
         return jsonify({"success": False, "message": "Patient record not found"}), 400
 
-    doctor = Doctor.query.filter_by(name=doctor_name, specialization=specialization).first()
+    # ✅ Correct doctor lookup
+    doctor = Doctor.query.filter_by(doctor_id=doctor_id, specialization=specialization).first()
     if not doctor:
         return jsonify({"success": False, "message": "Doctor not found"}), 404
 
@@ -107,7 +111,7 @@ def book_appointment():
     new_appt = Appointment(
         patient_id=patient.patient_id,
         doctor_id=doctor.doctor_id,
-        date=pd.Timestamp.today().strftime("%Y-%m-%d"),
+        date=data.get("date") or pd.Timestamp.today().strftime("%Y-%m-%d"),
         time=slot,
         description="Booked via chatbot",
         status="Pending"
@@ -119,8 +123,6 @@ def book_appointment():
         return jsonify({"success": True, "appointment_id": new_appt.appointment_id}), 201
     except IntegrityError as e:
         db.session.rollback()
-        if isinstance(e.orig, UniqueViolation):
-            return jsonify({"success": False, "message": "This slot is already booked"}), 400
         return jsonify({"success": False, "message": "Database integrity error"}), 400
 
 

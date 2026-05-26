@@ -88,7 +88,7 @@ function DoctorDashboard() {
 
   return (
     <>
-      <style>{globalCSS}</style>
+      <style>{globalCSS}</ style>
       <div className="page-bg" style={{ minHeight: "100vh" }}>
         {/* Header */}
         <div className="page-header">

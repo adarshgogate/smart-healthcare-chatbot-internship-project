@@ -402,7 +402,10 @@ function PredictionCard({ predictions }) {
   );
 }
 
-function DoctorList({ results, loadingSlot, onBook }) {
+
+  function DoctorList({ results, loadingSlot, onBook }) {
+  const [selectedDate, setSelectedDate] = useState("");
+
   return (
     <div style={styles.doctorSection} className="chat-msg">
       <p style={styles.doctorSectionTitle}>👨‍⚕️ Recommended Doctors</p>
@@ -413,51 +416,74 @@ function DoctorList({ results, loadingSlot, onBook }) {
               {p.doctor_name?.[0]?.toUpperCase() || "?"}
             </div>
             <div>
-              <p style={styles.doctorName}>{p.doctor_name || "General Physician"}</p>
+              <p style={styles.doctorName}>
+                {p.doctor_name || "General Physician"}
+              </p>
               <p style={styles.doctorSpec}>
                 {p.recommended_specialist || "Specialization not available"}
               </p>
             </div>
           </div>
+
+          {/* ✅ Date Picker */}
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+          />
+
+          {/* ✅ Slots Grid */}
           <div style={styles.slotsGrid}>
-            {[...(p.available_slots || []), ...(p.booked_slots || [])].map(
-              (slot, j) => {
-                const isBooked = (p.booked_slots || []).includes(slot);
-                return (
-                  <button
-                    key={j}
-                    className="slot-btn"
-                    style={{
-                      ...styles.slotBtn(loadingSlot === slot),
-                      opacity: isBooked ? 0.5 : 1,
-                      cursor: isBooked ? "not-allowed" : "pointer",
-                    }}
-                    disabled={isBooked || loadingSlot === slot}
-                    onClick={() =>
-                      onBook(
-                        {
-                          name: p.doctor_name,
-                          specialization: p.recommended_specialist,
-                        },
-                        slot
-                      )
-                    }
-                  >
-                    {loadingSlot === slot ? (
-                      <CircularProgress size={12} style={{ color: "#0d9488" }} />
-                    ) : (
-                      <>🕐 {slot}</>
-                    )}
-                  </button>
-                );
-              }
-            )}
+            {(p.available_slots || []).map((slot, j) => (
+              <button
+                key={j}
+                className="slot-btn"
+                style={{
+                  ...styles.slotBtn(loadingSlot === slot),
+                  cursor: "pointer",
+                }}
+                disabled={loadingSlot === slot}
+                onClick={() =>
+                  onBook(
+                    {
+                      doctor_id: p.doctor_id,               // ✅ include ID
+                      name: p.doctor_name,
+                      specialization: p.recommended_specialist,
+                      date: selectedDate                    // ✅ send chosen date
+                    },
+                    slot
+                  )
+                }
+              >
+                {loadingSlot === slot ? (
+                  <CircularProgress size={12} style={{ color: "#0d9488" }} />
+                ) : (
+                  <>🕐 {slot}</>
+                )}
+              </button>
+            ))}
+
+            {(p.booked_slots || []).map((slot, j) => (
+              <button
+                key={`booked-${j}`}
+                className="slot-btn"
+                style={{
+                  ...styles.slotBtn(false),
+                  opacity: 0.5,
+                  cursor: "not-allowed",
+                }}
+                disabled
+              >
+                ❌ {slot}
+              </button>
+            ))}
           </div>
         </div>
       ))}
     </div>
   );
 }
+
 
 // ── Main Component ───────────────────────────────────────────────────────────
 
@@ -489,6 +515,7 @@ function Chatbot() {
     navigate("/patient");
   };
 
+
   const handleBookAppointment = async (doctor, slot) => {
     try {
       setLoadingSlot(slot);
@@ -504,9 +531,15 @@ function Chatbot() {
 
       const res = await api.post(
         "/appointments/book",
-        { doctorName: doctor.name, specialization: doctor.specialization, slot },
+        {
+          doctor_id: doctor.doctor_id,          // ✅ use ID
+          specialization: doctor.specialization,
+          slot,
+          date: doctor.date
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
 
       if (res.data.success) {
         setMessages((prev) => [

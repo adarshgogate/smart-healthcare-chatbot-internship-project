@@ -39,30 +39,38 @@ function Appointments({ chatbotResponse }) {
     }
   };
 
-  // Booking from chatbot suggestions
-  const bookFromChatbot = async (doctorName, specialization, slot) => {
-    try {
-      const res = await api.post(
-        "/appointments/book",
-        { doctorName, specialization, slot },
-        {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        }
-      );
 
-      if (res.data.success) {
-        setMessage(
-          `📌 Appointment request sent to ${doctorName} for ${slot}. Awaiting doctor approval.`
-        );
-        fetchAppointments();
-      } else {
-        setMessage(`⚠️ ${res.data.message}`);
+// Booking from chatbot suggestions
+const bookFromChatbot = async (doctorId, specialization, slot) => {
+  try {
+    // ✅ Log the payload before sending
+    console.log("Booking payload:", {
+      doctor_id: doctorId,
+      specialization,
+      slot
+    });
+    const res = await api.post(
+      "/appointments/book",
+      { doctor_id: doctorId, specialization, slot },   // ✅ only doctor_id
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       }
-    } catch (err) {
-      console.error("Error booking appointment", err);
-      setMessage("❌ Error booking appointment");
+    );
+
+    if (res.data.success) {
+      setMessage(
+        `📌 Appointment request sent to Doctor ID ${doctorId} for ${slot}. Awaiting doctor approval.`
+      );
+      fetchAppointments();
+    } else {
+      setMessage(`⚠️ ${res.data.message}`);
     }
-  };
+  } catch (err) {
+    console.error("Error booking appointment", err);
+    setMessage("❌ Error booking appointment");
+  }
+};
+
 
   const deleteAppointment = async (id) => {
     try {
@@ -146,7 +154,7 @@ function Appointments({ chatbotResponse }) {
                       onClick={() =>
                         !isBooked &&
                         bookFromChatbot(
-                          pred.doctor_name,
+                          pred.doctor_id,
                           pred.recommended_specialist,
                           slot
                         )

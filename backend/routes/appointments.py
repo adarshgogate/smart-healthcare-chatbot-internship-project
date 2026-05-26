@@ -5,6 +5,8 @@ from models.patient import Patient
 from models.doctor import Doctor
 from sqlalchemy.exc import IntegrityError
 from psycopg2.errors import UniqueViolation
+from flask_jwt_extended import jwt_required, get_jwt_identity
+import pandas as pd
 
 appointments_bp = Blueprint('appointments', __name__)
 
@@ -22,6 +24,7 @@ def get_appointments():
     appointments = query.all()
     return jsonify([a.to_dict() for a in appointments])
 
+
 # ✅ GET single appointment
 @appointments_bp.route('/appointments/<int:appointment_id>', methods=['GET'])
 def get_appointment(appointment_id):
@@ -32,7 +35,7 @@ def get_appointment(appointment_id):
         return jsonify({"message": "Appointment not found"}), 404
 
 
-# ✅ CREATE appointment
+# ✅ CREATE appointment (manual booking)
 @appointments_bp.route('/appointments', methods=['POST'])
 def add_appointment():
     data = request.get_json()
@@ -74,12 +77,54 @@ def add_appointment():
 
     except IntegrityError as e:
         db.session.rollback()
-        # Catch unique constraint violation
         if isinstance(e.orig, UniqueViolation):
             return jsonify({"success": False, "message": "This slot is already booked"}), 400
         return jsonify({"success": False, "message": "Database integrity error"}), 400
 
-# ✅ UPDATE appointment status
+
+# ✅ BOOK appointment via chatbot (JWT protected) — single route, no duplicate
+@appointments_bp.route('/appointments/book', methods=['POST'])
+@jwt_required()
+def book_appointment():
+    data = request.get_json(force=True)
+    doctor_name = data.get("doctorName")
+    specialization = data.get("specialization")
+    slot = data.get("slot")
+
+    user_id = get_jwt_identity()
+    patient = Patient.query.filter_by(user_id=user_id).first()
+    if not patient:
+        return jsonify({"success": False, "message": "Patient record not found"}), 400
+
+    doctor = Doctor.query.filter_by(name=doctor_name, specialization=specialization).first()
+    if not doctor:
+        return jsonify({"success": False, "message": "Doctor not found"}), 404
+
+    slots_status = get_slots_status(doctor.doctor_id)
+    if slot not in slots_status["available_slots"]:
+        return jsonify({"success": False, "message": "Slot already taken"}), 400
+
+    new_appt = Appointment(
+        patient_id=patient.patient_id,
+        doctor_id=doctor.doctor_id,
+        date=pd.Timestamp.today().strftime("%Y-%m-%d"),
+        time=slot,
+        description="Booked via chatbot",
+        status="Pending"
+    )
+
+    try:
+        db.session.add(new_appt)
+        db.session.commit()
+        return jsonify({"success": True, "appointment_id": new_appt.appointment_id}), 201
+    except IntegrityError as e:
+        db.session.rollback()
+        if isinstance(e.orig, UniqueViolation):
+            return jsonify({"success": False, "message": "This slot is already booked"}), 400
+        return jsonify({"success": False, "message": "Database integrity error"}), 400
+
+
+# ✅ UPDATE appointment status (general)
 @appointments_bp.route("/appointments/<int:appointment_id>", methods=["PUT"])
 def update_appointment(appointment_id):
     data = request.get_json()
@@ -89,7 +134,7 @@ def update_appointment(appointment_id):
     if not appointment:
         return jsonify({"error": "Appointment not found"}), 404
 
-    valid_statuses = ["Pending", "Confirmed", "Completed", "Cancelled","Rejected"]
+    valid_statuses = ["Pending", "Confirmed", "Completed", "Cancelled", "Rejected"]
     if new_status not in valid_statuses:
         return jsonify({"error": "Invalid status"}), 400
 
@@ -105,38 +150,6 @@ def update_appointment(appointment_id):
         db.session.rollback()
         return jsonify({"error": "Database integrity error"}), 400
 
-# ✅ DELETE appointment
-@appointments_bp.route('/appointments/<int:appointment_id>', methods=['DELETE'])
-def delete_appointment(appointment_id):
-    appointment = Appointment.query.get(appointment_id)
-    if not appointment:
-        return jsonify({"message": "Appointment not found"}), 404
-
-    db.session.delete(appointment)
-    db.session.commit()
-    return jsonify({"message": "Appointment deleted successfully"})
-
-
-# ✅ reccomandation appointment of doctors
-@appointments_bp.route('/appointments/slots/<int:doctor_id>', methods=['GET'])
-def get_available_slots(doctor_id):
-    date = request.args.get("date")
-    query = Appointment.query.filter_by(doctor_id=doctor_id)
-    if date:
-        query = query.filter_by(date=date)
-
-    booked = query.all()
-    booked_times = {str(a.time) for a in booked}
-
-    all_slots = [f"{hour:02d}:00" for hour in range(9, 17)]
-    available = [slot for slot in all_slots if slot not in booked_times]
-
-    return jsonify({
-        "doctor_id": doctor_id,
-        "date": date if date else "any",
-        "available_slots": available,
-        "booked_slots": list(booked_times)
-    })
 
 # ✅ Doctor confirms or rejects appointment
 @appointments_bp.route('/appointments/<int:appointment_id>/status', methods=['PUT'])
@@ -159,7 +172,42 @@ def update_appointment_status(appointment_id):
         "status": appointment.status
     }), 200
 
-# ✅ Alias for booking via chatbot
-@appointments_bp.route('/appointments/book', methods=['POST'])
-def book_appointment():
-    return add_appointment()
+
+# ✅ DELETE appointment
+@appointments_bp.route('/appointments/<int:appointment_id>', methods=['DELETE'])
+def delete_appointment(appointment_id):
+    appointment = Appointment.query.get(appointment_id)
+    if not appointment:
+        return jsonify({"message": "Appointment not found"}), 404
+
+    db.session.delete(appointment)
+    db.session.commit()
+    return jsonify({"message": "Appointment deleted successfully"})
+
+
+# ✅ Get available and booked slots for a doctor
+@appointments_bp.route('/appointments/slots/<int:doctor_id>', methods=['GET'])
+def get_available_slots(doctor_id):
+    date = request.args.get("date")
+    slots_status = get_slots_status(doctor_id, date)
+
+    return jsonify({
+        "doctor_id": doctor_id,
+        "date": date if date else "any",
+        "available_slots": slots_status["available_slots"],
+        "booked_slots": slots_status["booked_slots"]
+    })
+
+
+# ✅ Helper: compute slot availability for a doctor
+def get_slots_status(doctor_id, date=None):
+    query = Appointment.query.filter_by(doctor_id=doctor_id)
+    if date:
+        query = query.filter_by(date=date)
+
+    booked = query.all()
+    booked_times = {str(a.time) for a in booked}
+    all_slots = [f"{hour:02d}:00" for hour in range(9, 17)]
+
+    available = [slot for slot in all_slots if slot not in booked_times]
+    return {"available_slots": available, "booked_slots": list(booked_times)}

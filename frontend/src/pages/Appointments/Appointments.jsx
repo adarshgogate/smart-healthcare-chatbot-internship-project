@@ -22,42 +22,42 @@ function Appointments({ chatbotResponse }) {
     }
   };
 
-  // Manual booking (existing flow)
+  // Manual booking
   const addAppointment = async () => {
     try {
       await api.post("/appointments", {
         patient_id: patientId,
         doctor_id: doctorId,
-        date
+        date,
       });
       setPatientId("");
       setDoctorId("");
       setDate("");
-      fetchAppointments(); // refresh list
+      fetchAppointments();
     } catch (err) {
       console.error("Error adding appointment", err);
     }
   };
 
-  // Booking directly from chatbot suggestions
+  // Booking from chatbot suggestions
   const bookFromChatbot = async (doctorName, specialization, slot) => {
     try {
-      const res = await api.post("/appointments/book", {
-        doctorName,
-        specialization,
-        slot
-      }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-      });
+      const res = await api.post(
+        "/appointments/book",
+        { doctorName, specialization, slot },
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }
+      );
 
       if (res.data.success) {
-        setMessage(`📌 Appointment request sent to ${doctorName} for ${slot}. Awaiting doctor approval.`);
+        setMessage(
+          `📌 Appointment request sent to ${doctorName} for ${slot}. Awaiting doctor approval.`
+        );
         fetchAppointments();
       } else {
         setMessage(`⚠️ ${res.data.message}`);
       }
-
-
     } catch (err) {
       console.error("Error booking appointment", err);
       setMessage("❌ Error booking appointment");
@@ -67,7 +67,7 @@ function Appointments({ chatbotResponse }) {
   const deleteAppointment = async (id) => {
     try {
       await api.delete(`/appointments/${id}`);
-      fetchAppointments(); // refresh list
+      fetchAppointments();
     } catch (err) {
       console.error("Error deleting appointment", err);
     }
@@ -76,7 +76,7 @@ function Appointments({ chatbotResponse }) {
   const updateAppointment = async (id, status) => {
     try {
       await api.put(`/appointments/${id}`, { status });
-      fetchAppointments(); // refresh list
+      fetchAppointments();
     } catch (err) {
       console.error("Error updating appointment", err);
     }
@@ -113,46 +113,75 @@ function Appointments({ chatbotResponse }) {
         <div style={{ marginTop: "20px" }}>
           <h4>Chatbot Suggestions</h4>
           <p>{chatbotResponse.reply}</p>
-          {chatbotResponse.predictions.map((pred, idx) => (
-            <div key={idx} style={{ marginBottom: "1rem" }}>
-              <strong>{pred.disease} ({pred.confidence}%)</strong>
-              <p>Doctor: {pred.doctor_name} ({pred.recommended_specialist})</p>
-              <div>
-                {(pred.available_slots.concat(pred.booked_slots) || []).map(slot => {
-                  const isBooked = (pred.booked_slots || []).includes(slot);
-                  return (
+
+          {chatbotResponse.predictions.map((pred, idx) => {
+            // Build a unified, sorted list of slots with their booked state.
+            // Each source array is mapped independently so isBooked is always correct.
+            const availableSlots = (pred.available_slots || []).map((slot) => ({
+              slot,
+              isBooked: false,
+            }));
+            const bookedSlots = (pred.booked_slots || []).map((slot) => ({
+              slot,
+              isBooked: true,
+            }));
+
+            const allSlots = [...availableSlots, ...bookedSlots].sort((a, b) =>
+              a.slot.localeCompare(b.slot)
+            );
+
+            return (
+              <div key={idx} style={{ marginBottom: "1rem" }}>
+                <strong>
+                  {pred.disease} ({pred.confidence}%)
+                </strong>
+                <p>
+                  Doctor: {pred.doctor_name} ({pred.recommended_specialist})
+                </p>
+
+                <div>
+                  {allSlots.map(({ slot, isBooked }) => (
                     <button
                       key={slot}
                       onClick={() =>
                         !isBooked &&
-                        bookFromChatbot(pred.doctor_name, pred.recommended_specialist, slot)
+                        bookFromChatbot(
+                          pred.doctor_name,
+                          pred.recommended_specialist,
+                          slot
+                        )
                       }
                       disabled={isBooked}
+                      title={isBooked ? "This slot is already booked" : `Book ${slot}`}
                       style={{
                         marginRight: "8px",
-                        opacity: isBooked ? 0.5 : 1,
+                        marginBottom: "6px",
+                        opacity: isBooked ? 0.6 : 1,
                         cursor: isBooked ? "not-allowed" : "pointer",
                         backgroundColor: isBooked ? "#f87171" : "#10b981",
                         color: "white",
                         padding: "6px 12px",
                         border: "none",
-                        borderRadius: "4px"
+                        borderRadius: "4px",
+                        fontWeight: "500",
                       }}
                     >
-                      🕐 {slot}
+                      {isBooked ? "🔴" : "🟢"} {slot}
                     </button>
-                  );
-                })}
-
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-          {message && <p>{message}</p>}
+            );
+          })}
+
+          {message && (
+            <p style={{ marginTop: "10px", fontWeight: "500" }}>{message}</p>
+          )}
         </div>
       )}
 
       {/* Appointment list */}
-      <table border="1" style={{ marginTop: "20px" }}>
+      <table border="1" style={{ marginTop: "20px", width: "100%" }}>
         <thead>
           <tr>
             <th>Patient ID</th>
@@ -164,17 +193,27 @@ function Appointments({ chatbotResponse }) {
         </thead>
         <tbody>
           {appointments.map((appt) => (
-            <tr key={appt.id}>
+            <tr key={appt.appointment_id}>
               <td>{appt.patient_id}</td>
               <td>{appt.doctor_id}</td>
               <td>{appt.date}</td>
               <td>{appt.status}</td>
               <td>
-                <button onClick={() => deleteAppointment(appt.id)}>Cancel</button>
-                <button onClick={() => updateAppointment(appt.id, "Confirmed")}>
+                <button onClick={() => deleteAppointment(appt.appointment_id)}>
+                  Cancel
+                </button>
+                <button
+                  onClick={() =>
+                    updateAppointment(appt.appointment_id, "Confirmed")
+                  }
+                >
                   Confirm
                 </button>
-                <button onClick={() => updateAppointment(appt.id, "Completed")}>
+                <button
+                  onClick={() =>
+                    updateAppointment(appt.appointment_id, "Completed")
+                  }
+                >
                   Complete
                 </button>
               </td>

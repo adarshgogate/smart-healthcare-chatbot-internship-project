@@ -8,6 +8,7 @@ from flask_jwt_extended import jwt_required, get_jwt
 from sqlalchemy import or_
 from datetime import datetime
 from sqlalchemy import func
+from models.patient import Patient
 
 
 admin_bp = Blueprint('admin', __name__, url_prefix="/admin")
@@ -129,15 +130,14 @@ def get_appointments():
 @admin_bp.route('/stats', methods=['GET'])
 @admin_required
 def get_stats():
-    status_counts = {
-        row[0]: row[1]
-        for row in db.session.query(Appointment.status, func.count()).group_by(Appointment.status).all()
+    total_users = User.query.count()
+    total_doctors = Doctor.query.count()
+    total_patients = Patient.query.count()
+    total_appointments = Appointment.query.count()
 
-    }
     return jsonify({
-        'total_users':        User.query.count(),
-        'total_doctors':      User.query.filter_by(role='Doctor').count(),
-        'total_patients':     User.query.filter_by(role='Patient').count(),
-        'total_appointments': Appointment.query.count(),
-        'appointment_status': status_counts,
+        "total_users": total_users,
+        "total_doctors": total_doctors,
+        "total_patients": total_patients,
+        "total_appointments": total_appointments
     })

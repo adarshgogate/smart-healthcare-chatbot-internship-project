@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Snackbar, Alert, CircularProgress } from "@mui/material";
 import api from "../api/axios";
+import { useNavigate } from "react-router-dom";
 
 const styles = {
   root: {
@@ -82,19 +83,20 @@ const styles = {
   },
   bubble: (sender) => ({
     padding: "11px 16px",
-    borderRadius: sender === "user"
-      ? "20px 20px 6px 20px"
-      : "20px 20px 20px 6px",
-    background: sender === "user"
-      ? "linear-gradient(135deg, #0d9488 0%, #0891b2 100%)"
-      : "white",
+    borderRadius:
+      sender === "user" ? "20px 20px 6px 20px" : "20px 20px 20px 6px",
+    background:
+      sender === "user"
+        ? "linear-gradient(135deg, #0d9488 0%, #0891b2 100%)"
+        : "white",
     color: sender === "user" ? "white" : "#1a2e2e",
     maxWidth: "78%",
     fontSize: 14.5,
     lineHeight: 1.55,
-    boxShadow: sender === "user"
-      ? "0 4px 14px rgba(8,145,178,0.28)"
-      : "0 2px 10px rgba(0,0,0,0.08)",
+    boxShadow:
+      sender === "user"
+        ? "0 4px 14px rgba(8,145,178,0.28)"
+        : "0 2px 10px rgba(0,0,0,0.08)",
     wordBreak: "break-word",
   }),
   typingBubble: {
@@ -150,10 +152,12 @@ const styles = {
     fontWeight: 700,
     padding: "2px 9px",
     borderRadius: 20,
-    background: conf >= 70 ? "#dcfce7" : conf >= 40 ? "#fef9c3" : "#fee2e2",
-    color: conf >= 70 ? "#166534" : conf >= 40 ? "#713f12" : "#991b1b",
+    background:
+      conf >= 70 ? "#dcfce7" : conf >= 40 ? "#fef9c3" : "#fee2e2",
+    color:
+      conf >= 70 ? "#166534" : conf >= 40 ? "#713f12" : "#991b1b",
   }),
-  progressBar: (conf) => ({
+  progressBar: () => ({
     height: 4,
     borderRadius: 4,
     background: "#e2e8f0",
@@ -165,11 +169,12 @@ const styles = {
     height: "100%",
     borderRadius: 4,
     width: `${conf}%`,
-    background: conf >= 70
-      ? "linear-gradient(90deg, #22c55e, #16a34a)"
-      : conf >= 40
-      ? "linear-gradient(90deg, #eab308, #ca8a04)"
-      : "linear-gradient(90deg, #ef4444, #dc2626)",
+    background:
+      conf >= 70
+        ? "linear-gradient(90deg, #22c55e, #16a34a)"
+        : conf >= 40
+        ? "linear-gradient(90deg, #eab308, #ca8a04)"
+        : "linear-gradient(90deg, #ef4444, #dc2626)",
   }),
   doctorSection: {
     width: "100%",
@@ -232,14 +237,6 @@ const styles = {
     color: "#64748b",
     marginTop: 1,
   },
-  slotsLabel: {
-    fontSize: 12,
-    color: "#64748b",
-    fontWeight: 600,
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
-  },
   slotsGrid: {
     display: "flex",
     flexWrap: "wrap",
@@ -275,7 +272,9 @@ const styles = {
     borderRadius: 20,
     border: "1.5px solid",
     borderColor: active ? "#0d9488" : "rgba(13,148,136,0.35)",
-    background: active ? "linear-gradient(135deg, #0d9488, #0891b2)" : "white",
+    background: active
+      ? "linear-gradient(135deg, #0d9488, #0891b2)"
+      : "white",
     color: active ? "white" : "#0d9488",
     fontSize: 13,
     fontWeight: 600,
@@ -327,9 +326,26 @@ const styles = {
     fontSize: 18,
     boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.4)",
   }),
+  goBackBtn: {
+    marginLeft: "auto",
+    padding: "8px 16px",
+    background: "rgba(255,255,255,0.18)",
+    color: "white",
+    border: "1.5px solid rgba(255,255,255,0.45)",
+    borderRadius: "10px",
+    cursor: "pointer",
+    fontWeight: 600,
+    fontSize: 13,
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    backdropFilter: "blur(4px)",
+    transition: "all 0.2s",
+    flexShrink: 0,
+  },
 };
 
-const keyframes = `
+const globalStyles = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
   @keyframes bounce {
     0%, 60%, 100% { transform: translateY(0); }
@@ -340,11 +356,18 @@ const keyframes = `
     to { opacity: 1; transform: translateY(0); }
   }
   .chat-msg { animation: fadeUp 0.25s ease both; }
-  .slot-btn:hover:not(:disabled) { background: linear-gradient(135deg, #0d9488, #0891b2) !important; color: white !important; transform: translateY(-1px); }
+  .slot-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0d9488, #0891b2) !important;
+    color: white !important;
+    transform: translateY(-1px);
+  }
   .chip-btn:hover { opacity: 0.85; transform: scale(0.98); }
   .send-btn:hover:not(:disabled) { transform: scale(1.08); }
-  input:focus, textarea:focus { border-color: #0d9488 !important; box-shadow: 0 0 0 3px rgba(13,148,136,0.12); }
+  .go-back-btn:hover { background: rgba(255,255,255,0.28) !important; }
+  textarea:focus { border-color: #0d9488 !important; box-shadow: 0 0 0 3px rgba(13,148,136,0.12); }
 `;
+
+// ── Sub-components ──────────────────────────────────────────────────────────
 
 function TypingIndicator() {
   return (
@@ -377,7 +400,7 @@ function PredictionCard({ predictions }) {
       })}
     </div>
   );
-}   // ✅ close PredictionCard properly
+}
 
 function DoctorList({ results, loadingSlot, onBook }) {
   return (
@@ -396,35 +419,39 @@ function DoctorList({ results, loadingSlot, onBook }) {
               </p>
             </div>
           </div>
-
           <div style={styles.slotsGrid}>
-            {([...(p.available_slots || []), ...(p.booked_slots || [])]).map((slot, j) => {
-              const isBooked = (p.booked_slots || []).includes(slot);
-              return (
-                <button
-                  key={j}
-                  className="slot-btn"
-                  style={{
-                    ...styles.slotBtn(loadingSlot === slot),
-                    opacity: isBooked ? 0.5 : 1,          // fade booked slots
-                    cursor: isBooked ? "not-allowed" : "pointer",
-                  }}
-                  disabled={isBooked || loadingSlot === slot}
-                  onClick={() =>
-                    onBook(
-                      { name: p.doctor_name, specialization: p.recommended_specialist },
-                      slot
-                    )
-                  }
-                >
-                  {loadingSlot === slot ? (
-                    <CircularProgress size={12} style={{ color: "#0d9488" }} />
-                  ) : (
-                    <>🕐 {slot}</>
-                  )}
-                </button>
-              );
-            })}
+            {[...(p.available_slots || []), ...(p.booked_slots || [])].map(
+              (slot, j) => {
+                const isBooked = (p.booked_slots || []).includes(slot);
+                return (
+                  <button
+                    key={j}
+                    className="slot-btn"
+                    style={{
+                      ...styles.slotBtn(loadingSlot === slot),
+                      opacity: isBooked ? 0.5 : 1,
+                      cursor: isBooked ? "not-allowed" : "pointer",
+                    }}
+                    disabled={isBooked || loadingSlot === slot}
+                    onClick={() =>
+                      onBook(
+                        {
+                          name: p.doctor_name,
+                          specialization: p.recommended_specialist,
+                        },
+                        slot
+                      )
+                    }
+                  >
+                    {loadingSlot === slot ? (
+                      <CircularProgress size={12} style={{ color: "#0d9488" }} />
+                    ) : (
+                      <>🕐 {slot}</>
+                    )}
+                  </button>
+                );
+              }
+            )}
           </div>
         </div>
       ))}
@@ -432,98 +459,134 @@ function DoctorList({ results, loadingSlot, onBook }) {
   );
 }
 
+// ── Main Component ───────────────────────────────────────────────────────────
 
 function Chatbot() {
+  const navigate = useNavigate();
+
   const [messages, setMessages] = useState([
-    { sender: "bot", text: "Hello! I'm your Smart Healthcare Assistant. Tell me your symptoms and I'll help you find the right care. 💙" },
+    {
+      sender: "bot",
+      text: "Hello! I'm your Smart Healthcare Assistant. Tell me your symptoms and I'll help you find the right care. 💙",
+    },
   ]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [loadingSlot, setLoadingSlot] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
   const chatEndRef = useRef(null);
   const textareaRef = useRef(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-const handleBookAppointment = async (doctor, slot) => {
-  try {
-    setLoadingSlot(slot);
 
-    const token = localStorage.getItem("token");
-    if (!token) {
-      setSnackbar({ open: true, message: "⚠️ Please log in first.", severity: "error" });
-      return;
-    }
+  const handleGoBack = () => {
+    navigate("/patient");
+  };
 
-    // ✅ Use /appointments/book — backend finds patient via JWT identity
-    const res = await api.post("/appointments/book", {
-      doctorName: doctor.name,
-      specialization: doctor.specialization,
-      slot,
-    }, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    if (res.data.success) {
-      setMessages((prev) => [
-        ...prev,
-        { sender: "bot", text: `📌 Appointment confirmed with ${doctor.name} at ${slot}. Awaiting doctor approval.` },
-      ]);
-      setSnackbar({ open: true, message: `✅ Booked with ${doctor.name} at ${slot}`, severity: "success" });
-    } else {
-      setSnackbar({ open: true, message: `❌ ${res.data.message || "Slot already taken."}`, severity: "error" });
-    }
-  } catch (err) {
-    console.error("Booking error", err);
-    setSnackbar({ open: true, message: "⚠️ Error booking appointment. Please try again.", severity: "error" });
-  } finally {
-    setLoadingSlot(null);
-  }
-};
-
-const handleSend = async (query = input) => {
-  if (!query.trim() || isSending) return;
-  setIsSending(true);
-  setMessages((prev) => [...prev, { sender: "user", text: query }, { sender: "typing" }]);
-  setInput("");
-  if (textareaRef.current) textareaRef.current.style.height = "auto";
-
-  try {
-    const token = localStorage.getItem("token");
-    const payload = { query };
-    console.log("Chatbot payload:", payload);
-
-    const res = await api.post("/chatbot", payload, {
-      headers: { 
-        Authorization: `Bearer ${token}`, 
-        "Content-Type": "application/json"
+  const handleBookAppointment = async (doctor, slot) => {
+    try {
+      setLoadingSlot(slot);
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setSnackbar({
+          open: true,
+          message: "⚠️ Please log in first.",
+          severity: "error",
+        });
+        return;
       }
-    });
 
-    console.log("Chatbot response:", res.data);
+      const res = await api.post(
+        "/appointments/book",
+        { doctorName: doctor.name, specialization: doctor.specialization, slot },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-    const predictions = res.data.predictions || [];
-    const results = res.data.results || [];
-    const botReply = res.data.reply || "Sorry, I didn't understand that.";
+      if (res.data.success) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            sender: "bot",
+            text: `📌 Appointment confirmed with ${doctor.name} at ${slot}. Awaiting doctor approval.`,
+          },
+        ]);
+        setSnackbar({
+          open: true,
+          message: `✅ Booked with ${doctor.name} at ${slot}`,
+          severity: "success",
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `❌ ${res.data.message || "Slot already taken."}`,
+          severity: "error",
+        });
+      }
+    } catch (err) {
+      console.error("Booking error", err);
+      setSnackbar({
+        open: true,
+        message: "⚠️ Error booking appointment. Please try again.",
+        severity: "error",
+      });
+    } finally {
+      setLoadingSlot(null);
+    }
+  };
 
-    setMessages((prev) => {
-      const filtered = prev.filter((m) => m.sender !== "typing");
-      const next = [...filtered, { sender: "bot", text: botReply }];
-      if (predictions.length > 0) next.push({ sender: "prediction", predictions });
-      if (results.length > 0) next.push({ sender: "doctorList", results });
-      return next;
-    });
-  } catch (err) {
-    console.error("Chatbot error", err);
+  const handleSend = async (query = input) => {
+    if (!query.trim() || isSending) return;
+    setIsSending(true);
     setMessages((prev) => [
-      ...prev.filter((m) => m.sender !== "typing"),
-      { sender: "bot", text: "Error connecting to the server. Please try again." },
+      ...prev,
+      { sender: "user", text: query },
+      { sender: "typing" },
     ]);
-  }
-  setIsSending(false);
-};
+    setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+    try {
+      const token = localStorage.getItem("token");
+      const res = await api.post(
+        "/chatbot",
+        { query },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const predictions = res.data.predictions || [];
+      const results = res.data.results || [];
+      const botReply = res.data.reply || "Sorry, I didn't understand that.";
+
+      setMessages((prev) => {
+        const filtered = prev.filter((m) => m.sender !== "typing");
+        const next = [...filtered, { sender: "bot", text: botReply }];
+        if (predictions.length > 0) next.push({ sender: "prediction", predictions });
+        if (results.length > 0) next.push({ sender: "doctorList", results });
+        return next;
+      });
+    } catch (err) {
+      console.error("Chatbot error", err);
+      setMessages((prev) => [
+        ...prev.filter((m) => m.sender !== "typing"),
+        {
+          sender: "bot",
+          text: "Error connecting to the server. Please try again.",
+        },
+      ]);
+    }
+    setIsSending(false);
+  };
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -540,27 +603,33 @@ const handleSend = async (query = input) => {
 
   return (
     <>
-      <style>{keyframes}</style>
+      <style>{globalStyles}</style>
       <div style={styles.root}>
         {/* Header */}
         <div style={styles.header}>
-          <div style={styles.headerAvatar}>🩺</div>
+          <div style={styles.headerAvatar}>🤖</div>
           <div>
-            <p style={styles.headerTitle}>Smart Healthcare Assistant</p>
+            <h3 style={styles.headerTitle}>Smart Healthcare Chatbot</h3>
             <p style={styles.headerSub}>
-              <span style={styles.onlineDot} />
-              Online · Powered by AI
+              <span style={styles.onlineDot} /> Online
             </p>
           </div>
+
+          {/* ✅ Go Back Button */}
+          <button
+            className="go-back-btn"
+            style={styles.goBackBtn}
+            onClick={handleGoBack}
+          >
+            ← Go Back
+          </button>
         </div>
 
         {/* Chat Window */}
         <div style={styles.chatWindow}>
           {messages.map((msg, idx) => {
-            if (msg.sender === "typing") {
-              return <TypingIndicator key={idx} />;
-            }
-            if (msg.sender === "doctorList") {
+            if (msg.sender === "typing") return <TypingIndicator key={idx} />;
+            if (msg.sender === "doctorList")
               return (
                 <DoctorList
                   key={idx}
@@ -569,18 +638,20 @@ const handleSend = async (query = input) => {
                   onBook={handleBookAppointment}
                 />
               );
-            }
-            if (msg.sender === "prediction") {
-              return <PredictionCard key={idx} predictions={msg.predictions} />;
-            }
+            if (msg.sender === "prediction")
+              return (
+                <PredictionCard key={idx} predictions={msg.predictions} />
+              );
             return (
-              <div key={idx} style={styles.bubbleWrap(msg.sender)} className="chat-msg">
+              <div
+                key={idx}
+                style={styles.bubbleWrap(msg.sender)}
+                className="chat-msg"
+              >
                 {msg.sender === "bot" && (
                   <div style={styles.botIcon}>🩺</div>
                 )}
-                <div style={styles.bubble(msg.sender)}>
-                  {msg.text}
-                </div>
+                <div style={styles.bubble(msg.sender)}>{msg.text}</div>
               </div>
             );
           })}
@@ -639,13 +710,17 @@ const handleSend = async (query = input) => {
           <Alert
             onClose={() => setSnackbar({ ...snackbar, open: false })}
             severity={snackbar.severity}
-            sx={{ width: "100%", borderRadius: "14px", fontFamily: "'DM Sans', sans-serif" }}
+            sx={{
+              width: "100%",
+              borderRadius: "14px",
+              fontFamily: "'DM Sans', sans-serif",
+            }}
           >
             {snackbar.message}
           </Alert>
         </Snackbar>
       </div>
-    </>  
+    </>
   );
 }
 

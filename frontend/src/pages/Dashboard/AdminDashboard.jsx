@@ -1,4 +1,20 @@
 import { useEffect, useState } from "react";
+import {
+  Box,
+  Typography,
+  Paper,
+  Grid,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  CircularProgress,
+  Alert,
+  Card,
+  CardContent,
+} from "@mui/material";
 import api from "../../api/axios";
 
 function AdminDashboard() {
@@ -14,94 +30,113 @@ function AdminDashboard() {
       return;
     }
 
-    // Fetch stats
-    api.
-    get("/admin/stats", {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-})
+    const headers = { Authorization: `Bearer ${token}` };
 
-      .then((res) => setStats(res.data))
-      .catch((err) => setError("Failed to load stats"));
-
-    // Fetch users
-    api
-      .get("/admin/users", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    Promise.all([
+      api.get("/admin/stats", { headers }),
+      api.get("/admin/users", { headers }),
+      api.get("/admin/appointments", { headers }),
+    ])
+      .then(([statsRes, usersRes, apptRes]) => {
+        setStats(statsRes.data);
+        setUsers(usersRes.data.users);
+        setAppointments(apptRes.data.appointments);
       })
-
-      .then((res) => setUsers(res.data.users))
-      .catch((err) => setError("Failed to load users"));
-
-    // Fetch appointments
-    api
-      .get("/admin/appointments", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      .then((res) => setAppointments(res.data.appointments))
-      .catch((err) => setError("Failed to load appointments"));
+      .catch(() => setError("Failed to load dashboard data"));
   }, []);
 
-  if (error) return <p style={{ color: "red" }}>{error}</p>;
-  if (!stats) return <p>Loading Admin Dashboard...</p>;
+  if (error) return <Alert severity="error">{error}</Alert>;
+  if (!stats) return <CircularProgress sx={{ m: 4 }} />;
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>⚙️ Admin Dashboard</h1>
+    <Box sx={{ p: 4, backgroundColor: "#f9fafc", minHeight: "100vh" }}>
+      <Typography variant="h4" fontWeight="bold" color="primary" gutterBottom>
+        ⚙️ Admin Dashboard
+      </Typography>
 
-      <h2>Overview</h2>
-      <ul>
-        <li>Total Users: {stats.total_users}</li>
-        <li>Total Doctors: {stats.total_doctors}</li>
-        <li>Total Patients: {stats.total_patients}</li>
-        <li>Total Appointments: {stats.total_appointments}</li>
-      </ul>
+      {/* Overview Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        {[
+          { label: "Total Users", value: stats.total_users },
+          { label: "Total Doctors", value: stats.total_doctors },
+          { label: "Total Patients", value: stats.total_patients },
+          { label: "Total Appointments", value: stats.total_appointments },
+        ].map((item) => (
+          <Grid item xs={12} sm={6} md={3} key={item.label}>
+            <Card elevation={3} sx={{ borderRadius: 3 }}>
+              <CardContent>
+                <Typography variant="h6" color="text.secondary">
+                  {item.label}
+                </Typography>
+                <Typography variant="h4" fontWeight="bold" color="primary">
+                  {item.value}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
 
-      <h2>👥 Users</h2>
-      <table border="1" cellPadding="8">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Username</th>
-            <th>Email</th>
-            <th>Role</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id}>
-              <td>{u.id}</td>
-              <td>{u.username}</td>
-              <td>{u.email}</td>
-              <td>{u.role}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Users Table */}
+      <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+        <Typography variant="h5" fontWeight="bold" color="secondary" gutterBottom>
+          👥 Users
+        </Typography>
+        <TableContainer>
+          <Table>
+            <TableHead sx={{ backgroundColor: "#e3f2fd" }}>
+              <TableRow>
+                <TableCell><b>ID</b></TableCell>
+                <TableCell><b>Username</b></TableCell>
+                <TableCell><b>Email</b></TableCell>
+                <TableCell><b>Role</b></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {users.map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell>{u.id}</TableCell>
+                  <TableCell>{u.username}</TableCell>
+                  <TableCell>{u.email}</TableCell>
+                  <TableCell>{u.role}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
 
-      <h2>📅 Appointments</h2>
-      <table border="1" cellPadding="8">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Patient ID</th>
-            <th>Doctor ID</th>
-            <th>Date</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {appointments.map((a) => (
-            <tr key={a.id}>
-              <td>{a.id}</td>
-              <td>{a.patient_id}</td>
-              <td>{a.doctor_id}</td>
-              <td>{a.date}</td>
-              <td>{a.status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      {/* Appointments Table */}
+      <Paper elevation={3} sx={{ p: 3 }}>
+        <Typography variant="h5" fontWeight="bold" color="secondary" gutterBottom>
+          📅 Appointments
+        </Typography>
+        <TableContainer>
+          <Table>
+            <TableHead sx={{ backgroundColor: "#e8f5e9" }}>
+              <TableRow>
+                <TableCell><b>ID</b></TableCell>
+                <TableCell><b>Patient ID</b></TableCell>
+                <TableCell><b>Doctor ID</b></TableCell>
+                <TableCell><b>Date</b></TableCell>
+                <TableCell><b>Status</b></TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {appointments.map((a) => (
+                <TableRow key={a.id}>
+                  <TableCell>{a.id}</TableCell>
+                  <TableCell>{a.patient_id}</TableCell>
+                  <TableCell>{a.doctor_id}</TableCell>
+                  <TableCell>{a.date}</TableCell>
+                  <TableCell>{a.status}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+    </Box>
   );
 }
 

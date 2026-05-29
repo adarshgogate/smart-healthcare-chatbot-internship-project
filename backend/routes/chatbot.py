@@ -179,7 +179,8 @@ def get_available_slots(doctor_id, date=None):
     booked = query.all()
     booked_times = {str(a.time) for a in booked}
     all_slots = [f"{hour:02d}:00" for hour in range(9, 17)]
-    return [slot for slot in all_slots if slot not in booked_times]
+    available = [slot for slot in all_slots if slot not in booked_times]
+    return available, list(booked_times)   # ← return both now
 
 # # --- Booking Appointments ---
 # @chatbot_bp.route("/appointments/book", methods=["POST"])
@@ -238,7 +239,7 @@ def chatbot():
             if disease in query:
                 spec = doctor_recommendations.get(disease.title(), "General Physician")
                 doc_obj = Doctor.query.filter_by(specialization=spec).first()
-                slots = get_available_slots(doc_obj.doctor_id) if doc_obj else []
+                slots, booked_slots = get_available_slots(doc_obj.doctor_id) if doc_obj else ([], [])
 
                 return jsonify({
                     "predictions": [{"disease": disease.title(), "confidence": 100.0}],
@@ -249,7 +250,8 @@ def chatbot():
                         "recommended_specialist": spec,
                         "doctor_id": doc_obj.doctor_id if doc_obj else None,   # ✅ added
                         "doctor_name": doc_obj.name if doc_obj else "General Physician",
-                        "available_slots": slots
+                        "available_slots": slots,
+                        "booked_slots": booked_slots
                     }]
                 })
 
@@ -358,7 +360,7 @@ def chatbot():
                         break
 
                 doc_obj = Doctor.query.filter_by(specialization=spec).first()
-                slots = get_available_slots(doc_obj.doctor_id) if doc_obj else []
+                slots, booked_slots = get_available_slots(doc_obj.doctor_id) if doc_obj else ([], [])
 
                 context = book_context.get(
                     detected_symptoms[0].lower(),
@@ -371,7 +373,8 @@ def chatbot():
                         "confidence": 10.0,
                         "recommended_specialist": spec,
                         "doctor_name": doc_obj.name if doc_obj else None,
-                        "available_slots": slots
+                        "available_slots": slots,
+                        "booked_slots": booked_slots
                     }],
                     "reply": f"{context}\n\n{disclaimer}"
                 })
@@ -400,7 +403,7 @@ def chatbot():
                     spec = "General Physician"
                     doc_obj = Doctor.query.filter(func.lower(Doctor.specialization) == "general physician").first()
 
-                slots = get_available_slots(doc_obj.doctor_id) if doc_obj else []
+                slots, booked_slots = get_available_slots(doc_obj.doctor_id) if doc_obj else ([], [])
 
                 results.append({
                     "disease": disease,
@@ -408,7 +411,8 @@ def chatbot():
                     "recommended_specialist": spec,
                     "doctor_id": doc_obj.doctor_id, 
                     "doctor_name": doc_obj.name if doc_obj else "General Physician",
-                    "available_slots": slots
+                    "available_slots": slots,
+                    "booked_slots": booked_slots
                 })
 
             # --- Deduplicate doctors ---

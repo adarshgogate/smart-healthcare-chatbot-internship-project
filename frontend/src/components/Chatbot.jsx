@@ -401,84 +401,126 @@ function PredictionCard({ predictions }) {
     </div>
   );
 }
-
-
-  function DoctorList({ results, loadingSlot, onBook }) {
+// Separate component so each card has its own state
+function DoctorCard({ p, loadingSlot, onBook }) {
   const [selectedDate, setSelectedDate] = useState("");
+  const [availableSlots, setAvailableSlots] = useState(p.available_slots || []);
+  const [bookedSlots, setBookedSlots] = useState(p.booked_slots || []);
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
+  const handleDateChange = async (e) => {
+    const date = e.target.value;
+    setSelectedDate(date);
+    if (!date || !p.doctor_id) return;
+    try {
+      setLoadingSlots(true);
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/appointments/slots/${p.doctor_id}?date=${date}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setAvailableSlots(data.available_slots || []);
+      setBookedSlots(data.booked_slots || []);
+    } catch (err) {
+      console.error("Failed to fetch slots:", err);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
+
+  return (
+    <div style={styles.doctorCard}>
+      {/* Doctor Header */}
+      <div style={styles.doctorCardHeader}>
+        <div style={styles.doctorAvatar(p.doctor_name)}>
+          {p.doctor_name?.[0]?.toUpperCase() || "?"}
+        </div>
+        <div>
+          <p style={styles.doctorName}>{p.doctor_name || "General Physician"}</p>
+          <p style={styles.doctorSpec}>
+            {p.recommended_specialist || "Specialization not available"}
+          </p>
+        </div>
+      </div>
+
+      {/* Date Picker */}
+      <input
+        type="date"
+        value={selectedDate}
+        onChange={handleDateChange}
+        min={new Date().toISOString().split("T")[0]}
+        style={{ margin: "8px 0", padding: "6px", borderRadius: "6px", width: "100%" }}
+      />
+
+      {/* Merged Slots Grid */}
+      {loadingSlots ? (
+        <div style={{ padding: "8px 0", color: "#0d9488", fontSize: 13 }}>
+          <CircularProgress size={12} style={{ color: "#0d9488", marginRight: 6 }} />
+          Loading slots...
+        </div>
+      ) : (
+        <div style={styles.slotsGrid}>
+          {[
+            ...availableSlots.map((slot) => ({ slot, booked: false })),
+            ...bookedSlots.map((slot) => ({ slot, booked: true })),
+          ]
+            .sort((a, b) => a.slot.localeCompare(b.slot))
+            .map(({ slot, booked }, j) =>
+              booked ? (
+                <button
+                  key={`booked-${j}`}
+                  disabled
+                  style={{
+                    ...styles.slotBtn(false),
+                    opacity: 0.45,
+                    cursor: "not-allowed",
+                    background: "#f1f5f9",
+                    color: "#94a3b8",
+                    border: "1.5px solid #e2e8f0",
+                    textDecoration: "line-through",
+                  }}
+                >
+                  ❌ {slot}
+                </button>
+              ) : (
+                <button
+                  key={`avail-${j}`}
+                  className="slot-btn"
+                  style={{ ...styles.slotBtn(loadingSlot === slot), cursor: "pointer" }}
+                  disabled={loadingSlot === slot || !selectedDate}
+                  title={!selectedDate ? "Please select a date first" : ""}
+                  onClick={() =>
+                    onBook(
+                      {
+                        doctor_id: p.doctor_id,
+                        name: p.doctor_name,
+                        specialization: p.recommended_specialist,
+                        date: selectedDate,
+                      },
+                      slot
+                    )
+                  }
+                >
+                  {loadingSlot === slot ? (
+                    <CircularProgress size={12} style={{ color: "#0d9488" }} />
+                  ) : (
+                    <>🕐 {slot}</>
+                  )}
+                </button>
+              )
+            )}
+        </div>
+      )}
+    </div>
+  );
+}
+// DoctorList just renders cards now
+function DoctorList({ results, loadingSlot, onBook }) {
   return (
     <div style={styles.doctorSection} className="chat-msg">
       <p style={styles.doctorSectionTitle}>👨‍⚕️ Recommended Doctors</p>
       {results.map((p, i) => (
-        <div key={i} style={styles.doctorCard}>
-          <div style={styles.doctorCardHeader}>
-            <div style={styles.doctorAvatar(p.doctor_name)}>
-              {p.doctor_name?.[0]?.toUpperCase() || "?"}
-            </div>
-            <div>
-              <p style={styles.doctorName}>
-                {p.doctor_name || "General Physician"}
-              </p>
-              <p style={styles.doctorSpec}>
-                {p.recommended_specialist || "Specialization not available"}
-              </p>
-            </div>
-          </div>
-
-          {/* ✅ Date Picker */}
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-          />
-
-          {/* ✅ Slots Grid */}
-          <div style={styles.slotsGrid}>
-            {(p.available_slots || []).map((slot, j) => (
-              <button
-                key={j}
-                className="slot-btn"
-                style={{
-                  ...styles.slotBtn(loadingSlot === slot),
-                  cursor: "pointer",
-                }}
-                disabled={loadingSlot === slot}
-                onClick={() =>
-                  onBook(
-                    {
-                      doctor_id: p.doctor_id,               // ✅ include ID
-                      name: p.doctor_name,
-                      specialization: p.recommended_specialist,
-                      date: selectedDate                    // ✅ send chosen date
-                    },
-                    slot
-                  )
-                }
-              >
-                {loadingSlot === slot ? (
-                  <CircularProgress size={12} style={{ color: "#0d9488" }} />
-                ) : (
-                  <>🕐 {slot}</>
-                )}
-              </button>
-            ))}
-
-            {(p.booked_slots || []).map((slot, j) => (
-              <button
-                key={`booked-${j}`}
-                className="slot-btn"
-                style={{
-                  ...styles.slotBtn(false),
-                  opacity: 0.5,
-                  cursor: "not-allowed",
-                }}
-                disabled
-              >
-                ❌ {slot}
-              </button>
-            ))}
-          </div>
-        </div>
+        <DoctorCard key={i} p={p} loadingSlot={loadingSlot} onBook={onBook} />
       ))}
     </div>
   );

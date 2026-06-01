@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from psycopg2.errors import UniqueViolation
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import pandas as pd
+import json
 
 appointments_bp = Blueprint('appointments', __name__)
 
@@ -90,28 +91,42 @@ def add_appointment():
 @jwt_required()
 def book_appointment():
     data = request.get_json(force=True)
-    doctor_id = data.get("doctor_id")
-    specialization = data.get("specialization")
-    slot = data.get("slot")
+    print("👉 Incoming booking data:", data)
 
-    user_id = get_jwt_identity()
+    # ✅ Decode JSON string back to dict
+    identity = json.loads(get_jwt_identity())
+    print("👉 JWT identity:", identity)
+
+    user_id = identity["id"]
+    role_id = identity["role_id"]
+    role = identity["role"]
+
+    # ✅ Lookup patient by user_id
     patient = Patient.query.filter_by(user_id=user_id).first()
     if not patient:
         return jsonify({"success": False, "message": "Patient record not found"}), 400
 
-    # ✅ Correct doctor lookup
+    # ✅ Extract doctor info from payload
+    doctor_id = data.get("doctor_id")
+    specialization = data.get("specialization")
+    slot = data.get("slot")
+    date = data.get("date") or pd.Timestamp.today().strftime("%Y-%m-%d")
+
+    # ✅ Lookup doctor safely
     doctor = Doctor.query.filter_by(doctor_id=doctor_id, specialization=specialization).first()
     if not doctor:
         return jsonify({"success": False, "message": "Doctor not found"}), 404
 
-    slots_status = get_slots_status(doctor.doctor_id)
+    # ✅ Check slot availability
+    slots_status = get_slots_status(doctor.doctor_id, date)
     if slot not in slots_status["available_slots"]:
         return jsonify({"success": False, "message": "Slot already taken"}), 400
 
+    # ✅ Create appointment
     new_appt = Appointment(
         patient_id=patient.patient_id,
         doctor_id=doctor.doctor_id,
-        date=data.get("date") or pd.Timestamp.today().strftime("%Y-%m-%d"),
+        date=date,
         time=slot,
         description="Booked via chatbot",
         status="Pending"
@@ -121,10 +136,9 @@ def book_appointment():
         db.session.add(new_appt)
         db.session.commit()
         return jsonify({"success": True, "appointment_id": new_appt.appointment_id}), 201
-    except IntegrityError as e:
+    except IntegrityError:
         db.session.rollback()
         return jsonify({"success": False, "message": "Database integrity error"}), 400
-
 
 # ✅ UPDATE appointment status (general)
 @appointments_bp.route("/appointments/<int:appointment_id>", methods=["PUT"])
@@ -213,3 +227,4 @@ def get_slots_status(doctor_id, date=None):
 
     available = [slot for slot in all_slots if slot not in booked_times]
     return {"available_slots": available, "booked_slots": list(booked_times)}
+

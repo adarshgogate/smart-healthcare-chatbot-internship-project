@@ -6,10 +6,12 @@ import json
 from models.doctor import Doctor
 from models.appointment import Appointment
 from models.patient import Patient
+from models.chat_message import ChatMessage
 from extensions import db
 import traceback
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func   
+
 
 chatbot_bp = Blueprint("chatbot", __name__)
 # --- Doctor recommendation mapping ---
@@ -227,8 +229,29 @@ def get_available_slots(doctor_id, date=None):
 def chatbot():
     try:
         data = request.get_json(force=True)
-        print("Received chatbot request:", data)   # ✅ add this line
-        query = (data.get("query") or "").lower().strip()
+        print("👉 Incoming data:", data)
+
+        identity = json.loads(get_jwt_identity())   # ✅ decode back to dict
+        user_id = identity["id"]          # User.id
+        role_id = identity["role_id"]     # Patient.patient_id or Doctor.doctor_id
+        role = identity["role"]
+
+        print("👉 JWT identity:", identity)
+        print("👉 Using patient_id:", role_id)
+
+        # ✅ Extract user message first
+        user_msg = (data.get("query") or "").strip()
+        if not user_msg:
+            return jsonify({"error": "No query provided"}), 400
+
+        # ✅ Save patient message with correct patient_id
+        patient_msg = ChatMessage(patient_id=role_id, sender="patient", text=user_msg)
+        db.session.add(patient_msg)
+        db.session.commit()
+
+        # Continue with lowercased query for prediction logic
+        query = user_msg.lower()
+
         if not query:
             return jsonify({"error": "No query provided"}), 400
 
@@ -241,14 +264,26 @@ def chatbot():
                 doc_obj = Doctor.query.filter_by(specialization=spec).first()
                 slots, booked_slots = get_available_slots(doc_obj.doctor_id) if doc_obj else ([], [])
 
+                reply_text = f"{book_context[disease]}\n\n{disclaimer}"
+                bot_msg = ChatMessage(
+                    patient_id=role_id,
+                    sender="bot",
+                    text=reply_text,
+                    prediction=disease.title(),
+                    confidence_score=100.0,
+                    recommended_doctor=spec
+                )
+                db.session.add(bot_msg)
+                db.session.commit()
+
                 return jsonify({
                     "predictions": [{"disease": disease.title(), "confidence": 100.0}],
-                    "reply": f"{book_context[disease]}\n\n{disclaimer}",
+                    "reply": reply_text,
                     "results": [{
                         "disease": disease.title(),
                         "confidence": 100.0,
                         "recommended_specialist": spec,
-                        "doctor_id": doc_obj.doctor_id if doc_obj else None,   # ✅ added
+                        "doctor_id": doc_obj.doctor_id if doc_obj else None,
                         "doctor_name": doc_obj.name if doc_obj else "General Physician",
                         "available_slots": slots,
                         "booked_slots": booked_slots
@@ -256,7 +291,8 @@ def chatbot():
                 })
 
 
-         # --- Synonym dictionary ---
+
+        # --- Synonym dictionary ---
         symptom_synonyms = {
             "muscle pain": "muscle_wasting",
             "leg pain": "joint_pain",
@@ -366,6 +402,18 @@ def chatbot():
                     detected_symptoms[0].lower(),
                     "Your symptoms suggest consulting a specialist."
                 )
+                
+                reply_text = f"{context}\n\n{disclaimer}"
+                bot_msg = ChatMessage(
+                    patient_id=role_id,
+                    sender="bot",
+                    text=reply_text,
+                    prediction="Symptom-based condition",
+                    confidence_score=10.0,
+                    recommended_doctor=spec
+                )
+                db.session.add(bot_msg)
+                db.session.commit()
 
                 return jsonify({
                     "predictions": [{
@@ -376,7 +424,7 @@ def chatbot():
                         "available_slots": slots,
                         "booked_slots": booked_slots
                     }],
-                    "reply": f"{context}\n\n{disclaimer}"
+                    "reply": reply_text   
                 })
 
             # --- Normal flow with predictions ---
@@ -397,7 +445,6 @@ def chatbot():
                 else:
                     spec = doctor_recommendations.get(disease) or symptom_to_specialist.get(disease_lower) or "General Physician"
 
-                spec = doctor_recommendations.get(disease) or symptom_to_specialist.get(disease_lower) or "General Physician"
                 doc_obj = Doctor.query.filter(func.lower(Doctor.specialization) == spec.lower()).first()
                 if not doc_obj:
                     spec = "General Physician"
@@ -405,6 +452,7 @@ def chatbot():
 
                 slots, booked_slots = get_available_slots(doc_obj.doctor_id) if doc_obj else ([], [])
 
+                
                 results.append({
                     "disease": disease,
                     "confidence": conf,
@@ -423,10 +471,27 @@ def chatbot():
                 if key not in seen_doctors:
                     unique_results.append(r)
                     seen_doctors.add(key)
+                    
+            
+            # ✅ Save bot message with prediction fields (only once, after loop)
+            top_disease, top_confidence = predictions_raw[0]
+            recommended_doctor = unique_results[0]["recommended_specialist"] if unique_results else "General Physician"
+
+            bot_msg = ChatMessage(
+                patient_id=role_id,
+                sender="bot",
+                text=doctor_reply,
+                prediction=top_disease,
+                confidence_score=top_confidence,
+                recommended_doctor=recommended_doctor
+            )
+            db.session.add(bot_msg)
+            db.session.commit()        
 
             # ✅ Final clean log line
             print("✅ Final results:", unique_results)
-
+            
+        
             return jsonify({
                 "predictions": predictions,
                 "reply": doctor_reply,
@@ -434,9 +499,21 @@ def chatbot():
             })
 
         # --- No symptoms detected ---
+        
+        reply_text = f"Your input didn’t match any known symptom. Please provide more details.\n\n{disclaimer}"
+        bot_msg = ChatMessage(
+            patient_id=role_id,
+            sender="bot",
+            text=reply_text,
+            prediction="No match",
+            confidence_score=0.0,
+            recommended_doctor="General Physician"
+        )
+        db.session.add(bot_msg)
+        db.session.commit()
         return jsonify({
         "predictions": [],
-        "reply": f"Your input didn’t match any known symptom. Please provide more details.\n\n{disclaimer}",
+        "reply": reply_text,
         "recommended_doctor": "General Physician",
         "available_slots": []
         }), 200

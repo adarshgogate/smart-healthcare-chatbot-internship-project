@@ -2,6 +2,10 @@ from extensions import db
 
 class Appointment(db.Model):
     __tablename__ = "appointments"
+    __table_args__ = (
+    db.UniqueConstraint('doctor_id', 'date', 'time', name='unique_doctor_slot'),
+    )
+
 
     appointment_id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.Integer, db.ForeignKey("patients.patient_id"), nullable=False)

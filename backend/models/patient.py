@@ -12,3 +12,4 @@ class Patient(db.Model):
 
     # Relationship back to User
     user = db.relationship("User", backref=db.backref("patient_profile", uselist=False))
+    chats = db.relationship("ChatMessage", backref="patient", lazy=True)

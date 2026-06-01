@@ -62,7 +62,7 @@ function AdminDashboard() {
           { label: "Total Patients", value: stats.total_patients },
           { label: "Total Appointments", value: stats.total_appointments },
         ].map((item) => (
-          <Grid item xs={12} sm={6} md={3} key={item.label}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} key={item.label}>
             <Card elevation={3} sx={{ borderRadius: 3 }}>
               <CardContent>
                 <Typography variant="h6" color="text.secondary">

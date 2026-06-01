@@ -79,6 +79,11 @@ function PatientDashboard() {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.clear();
+    window.location.href = "/login";
+  };
+
   const tabs = [
     { id: "appointments", label: "📋 My Appointments", count: appointments.length },
     { id: "book", label: "➕ Book Appointment", count: null },
@@ -124,7 +129,7 @@ function PatientDashboard() {
 
         <div style={{ padding: "24px 20px", maxWidth: 1100, margin: "0 auto" }}>
           {/* Tab Nav */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -149,12 +154,41 @@ function PatientDashboard() {
                 {tab.count !== null && tab.count > 0 && (
                   <span style={{
                     background: activeTab === tab.id ? "rgba(255,255,255,0.3)" : "#0d9488",
-                    color: activeTab === tab.id ? "white" : "white",
+                    color: "white",
                     borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 700,
                   }}>{tab.count}</span>
                 )}
               </button>
             ))}
+
+            {/* Logout button pushed to the right */}
+            <button
+              onClick={handleLogout}
+              style={{
+                marginLeft: "auto",
+                padding: "10px 20px",
+                borderRadius: 14,
+                border: "1.5px solid rgba(239,68,68,0.35)",
+                background: "rgba(254,242,242,0.85)",
+                color: "#dc2626",
+                fontSize: 14, fontWeight: 600, cursor: "pointer",
+                fontFamily: "'DM Sans', sans-serif",
+                transition: "all 0.2s",
+                display: "flex", alignItems: "center", gap: 6,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = "linear-gradient(135deg,#ef4444,#dc2626)";
+                e.currentTarget.style.color = "white";
+                e.currentTarget.style.borderColor = "#ef4444";
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = "rgba(254,242,242,0.85)";
+                e.currentTarget.style.color = "#dc2626";
+                e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
+              }}
+            >
+              🚪 Logout
+            </button>
           </div>
 
           {/* --- Book Appointment Tab --- */}
@@ -166,9 +200,7 @@ function PatientDashboard() {
               <p style={{ fontSize: 13.5, color: "#64748b", marginBottom: 24 }}>
                 Fill in the details and we'll connect you with your doctor.
               </p>
-
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {/* Doctor Select */}
                 <div>
                   <label style={{ fontSize: 13, fontWeight: 600, color: "#0f766e", display: "block", marginBottom: 6 }}>
                     Select Doctor *
@@ -190,8 +222,6 @@ function PatientDashboard() {
                     <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#0d9488" }}>▾</span>
                   </div>
                 </div>
-
-                {/* Date & Time */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                   <div>
                     <label style={{ fontSize: 13, fontWeight: 600, color: "#0f766e", display: "block", marginBottom: 6 }}>Date *</label>
@@ -202,8 +232,6 @@ function PatientDashboard() {
                     <input className="field" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
                   </div>
                 </div>
-
-                {/* Description */}
                 <div>
                   <label style={{ fontSize: 13, fontWeight: 600, color: "#0f766e", display: "block", marginBottom: 6 }}>
                     Reason for Visit
@@ -217,7 +245,6 @@ function PatientDashboard() {
                     style={{ resize: "vertical" }}
                   />
                 </div>
-
                 <button
                   className="btn-primary"
                   onClick={bookAppointment}
@@ -274,31 +301,19 @@ function PatientDashboard() {
                             </div>
                           </td>
                           <td>
-                            <input
-                              type="date"
-                              className="field"
-                              defaultValue={appt.date}
+                            <input type="date" className="field" defaultValue={appt.date}
                               onChange={(e) => (appt.newDate = e.target.value)}
-                              style={{ width: 145, padding: "7px 10px", fontSize: 13 }}
-                            />
+                              style={{ width: 145, padding: "7px 10px", fontSize: 13 }} />
                           </td>
                           <td>
-                            <input
-                              type="time"
-                              className="field"
-                              defaultValue={appt.time}
+                            <input type="time" className="field" defaultValue={appt.time}
                               onChange={(e) => (appt.newTime = e.target.value)}
-                              style={{ width: 120, padding: "7px 10px", fontSize: 13 }}
-                            />
+                              style={{ width: 120, padding: "7px 10px", fontSize: 13 }} />
                           </td>
                           <td>
-                            <input
-                              type="text"
-                              className="field"
-                              defaultValue={appt.description}
+                            <input type="text" className="field" defaultValue={appt.description}
                               onChange={(e) => (appt.newDescription = e.target.value)}
-                              style={{ width: 160, padding: "7px 10px", fontSize: 13 }}
-                            />
+                              style={{ width: 160, padding: "7px 10px", fontSize: 13 }} />
                           </td>
                           <td>
                             <span className={`status-pill status-${appt.status || "Pending"}`}>

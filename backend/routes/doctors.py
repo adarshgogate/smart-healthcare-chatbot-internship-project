@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
 from extensions import db
 from models.doctor import Doctor
+from flask_jwt_extended import jwt_required, get_jwt_identity
+
 
 doctors_bp = Blueprint('doctors', __name__)
 
@@ -74,3 +76,13 @@ def delete_doctor(doctor_id):
     db.session.delete(doctor)
     db.session.commit()
     return jsonify({"message": "Doctor deleted successfully"})
+
+@doctors_bp.route('/doctors/me', methods=['GET'])
+@jwt_required()
+def get_my_doctor_profile():
+    identity = get_jwt_identity()
+    role_id = identity["role_id"]   # doctor_id from JWT
+    doctor = Doctor.query.get(role_id)
+    if not doctor:
+        return jsonify({"message": "Doctor not found"}), 404
+    return jsonify(doctor.to_dict())

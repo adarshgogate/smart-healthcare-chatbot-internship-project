@@ -2,13 +2,14 @@ import React, { useEffect, useState } from "react";
 import { CircularProgress } from "@mui/material";
 import api from "../../api/axios";
 import { globalCSS } from "./theme";
+import PatientReport from "../../components/PatientReport";
 
 const STATUS_ICONS = {
   Confirmed: "✅",
-  Pending: "⏳",
+  Pending:   "⏳",
   Completed: "🏁",
   Cancelled: "❌",
-  Rejected: "🚫",
+  Rejected:  "🚫",
 };
 
 function StatCard({ icon, label, value, color, delay }) {
@@ -35,8 +36,10 @@ function StatCard({ icon, label, value, color, delay }) {
 
 function DoctorDashboard() {
   const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("All");
+  const [loading, setLoading]           = useState(true);
+  const [filter, setFilter]             = useState("All");
+  const [reportPatient, setReportPatient] = useState(null);
+
   const doctorId = localStorage.getItem("role_id");
 
   useEffect(() => {
@@ -77,20 +80,28 @@ function DoctorDashboard() {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.clear();
+    window.location.href = "/login";
+  };
+
   const counts = {
-    All: appointments.length,
-    Pending: appointments.filter((a) => a.status === "Pending").length,
+    All:       appointments.length,
+    Pending:   appointments.filter((a) => a.status === "Pending").length,
     Confirmed: appointments.filter((a) => a.status === "Confirmed").length,
     Completed: appointments.filter((a) => a.status === "Completed").length,
   };
 
-  const filtered = filter === "All" ? appointments : appointments.filter((a) => a.status === filter);
+  const filtered = filter === "All"
+    ? appointments
+    : appointments.filter((a) => a.status === filter);
 
   return (
     <>
-      <style>{globalCSS}</ style>
+      <style>{globalCSS}</style>
       <div className="page-bg" style={{ minHeight: "100vh" }}>
-        {/* Header */}
+
+        {/* ── Header ── */}
         <div className="page-header">
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{
@@ -106,7 +117,8 @@ function DoctorDashboard() {
         </div>
 
         <div style={{ padding: "28px 24px", maxWidth: 1100, margin: "0 auto" }}>
-          {/* Stat Cards */}
+
+          {/* ── Stat Cards ── */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 28 }}>
             <StatCard icon="📋" label="Total"     value={counts.All}       color="#0d9488" delay={1} />
             <StatCard icon="⏳" label="Pending"   value={counts.Pending}   color="#eab308" delay={2} />
@@ -114,8 +126,8 @@ function DoctorDashboard() {
             <StatCard icon="🏁" label="Completed" value={counts.Completed} color="#6366f1" delay={4} />
           </div>
 
-          {/* Filter Tabs */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          {/* ── Filter Tabs + Logout ── */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
             {["All", "Pending", "Confirmed", "Completed", "Cancelled"].map((tab) => (
               <button
                 key={tab}
@@ -132,13 +144,42 @@ function DoctorDashboard() {
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               >
-                {tab} {tab !== "All" && appointments.filter(a => a.status === tab).length > 0
-                  ? `(${appointments.filter(a => a.status === tab).length})` : ""}
+                {tab}{tab !== "All" && appointments.filter(a => a.status === tab).length > 0
+                  ? ` (${appointments.filter(a => a.status === tab).length})` : ""}
               </button>
             ))}
+
+            {/* Logout pushed to the right */}
+            <button
+              onClick={handleLogout}
+              style={{
+                marginLeft: "auto",
+                padding: "7px 18px",
+                borderRadius: 20,
+                border: "1.5px solid rgba(239,68,68,0.35)",
+                background: "rgba(254,242,242,0.85)",
+                color: "#dc2626",
+                fontSize: 13, fontWeight: 600,
+                cursor: "pointer", transition: "all 0.18s",
+                fontFamily: "'DM Sans', sans-serif",
+                display: "flex", alignItems: "center", gap: 5,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = "linear-gradient(135deg,#ef4444,#dc2626)";
+                e.currentTarget.style.color = "white";
+                e.currentTarget.style.borderColor = "#ef4444";
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = "rgba(254,242,242,0.85)";
+                e.currentTarget.style.color = "#dc2626";
+                e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)";
+              }}
+            >
+              🚪 Logout
+            </button>
           </div>
 
-          {/* Table Card */}
+          {/* ── Table Card ── */}
           <div className="glass-card anim-fade-up" style={{ overflow: "hidden" }}>
             {loading ? (
               <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: 60, gap: 16 }}>
@@ -168,8 +209,6 @@ function DoctorDashboard() {
                   <tbody>
                     {filtered.map((a) => (
                       <tr key={a.appointment_id}>
-
-                        {/* ✅ PATIENT CELL — shows name + ID */}
                         <td>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <div style={{
@@ -198,7 +237,6 @@ function DoctorDashboard() {
                             </div>
                           </div>
                         </td>
-
                         <td>
                           <span style={{
                             background: "#f0fdf9", padding: "4px 10px", borderRadius: 8,
@@ -231,42 +269,50 @@ function DoctorDashboard() {
                         </td>
                         <td>
                           <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+                            <button
+                              onClick={() => setReportPatient({ id: a.patient_id, name: a.patient_name })}
+                              title="View full patient history"
+                              style={{
+                                padding: "6px 12px", borderRadius: 8,
+                                border: "1.5px solid #0891b2",
+                                background: "linear-gradient(135deg,#eff6ff,#e0f2fe)",
+                                color: "#0891b2", fontSize: 12.5, fontWeight: 700,
+                                cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+                                fontFamily: "inherit", transition: "all 0.18s", whiteSpace: "nowrap",
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.background = "linear-gradient(135deg,#0891b2,#0d9488)";
+                                e.currentTarget.style.color = "white";
+                                e.currentTarget.style.transform = "translateY(-1px)";
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.background = "linear-gradient(135deg,#eff6ff,#e0f2fe)";
+                                e.currentTarget.style.color = "#0891b2";
+                                e.currentTarget.style.transform = "none";
+                              }}
+                            >
+                              📋 View Report
+                            </button>
                             {a.status === "Pending" && (
                               <>
-                                <button
-                                  className="btn-success"
+                                <button className="btn-success"
                                   onClick={() => handleStatusChange(a.appointment_id, "Confirmed")}
-                                  title="Confirm"
-                                >
-                                  ✅ Confirm
-                                </button>
-                                <button
-                                  className="btn-danger"
+                                >✅ Confirm</button>
+                                <button className="btn-danger"
                                   onClick={() => handleStatusChange(a.appointment_id, "Rejected")}
-                                  title="Reject"
-                                >
-                                  🚫 Reject
-                                </button>
+                                >🚫 Reject</button>
                               </>
                             )}
                             {a.status === "Confirmed" && (
-                              <button
-                                className="btn-ghost"
+                              <button className="btn-ghost"
                                 onClick={() => handleStatusChange(a.appointment_id, "Completed")}
-                              >
-                                🏁 Complete
-                              </button>
+                              >🏁 Complete</button>
                             )}
-                            <button
-                              className="btn-danger"
+                            <button className="btn-danger"
                               onClick={() => handleDelete(a.appointment_id)}
-                              title="Delete"
-                            >
-                              🗑 Delete
-                            </button>
+                            >🗑 Delete</button>
                           </div>
                         </td>
-
                       </tr>
                     ))}
                   </tbody>
@@ -276,6 +322,14 @@ function DoctorDashboard() {
           </div>
         </div>
       </div>
+
+      {reportPatient && (
+        <PatientReport
+          patientId={reportPatient.id}
+          patientName={reportPatient.name}
+          onClose={() => setReportPatient(null)}
+        />
+      )}
     </>
   );
 }

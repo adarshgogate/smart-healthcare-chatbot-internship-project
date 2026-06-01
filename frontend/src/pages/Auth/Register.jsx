@@ -48,7 +48,7 @@ function Register() {
   ];
 
   const genders = ["Male", "Female", "Other"];
-  const specs = ["Cardiology", "Dermatology", "General Medicine", "Neurology", "Orthopedics", "Pediatrics", "Psychiatry", "Radiology", "Surgery", "Other"];
+  const specs = ["Cardiology", "Dermatology", "Gastroenterologist" , "General Medicine", "Neurology", "Orthopedics", "Pediatrics", "Psychiatry", "Radiology", "Surgery", "Other"];
 
   return (
     <>

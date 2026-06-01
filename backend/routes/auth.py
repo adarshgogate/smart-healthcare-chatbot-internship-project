@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from extensions import db, bcrypt
 from models.doctor import Doctor
 from models.patient import Patient
+import json
 from models.user import User
 from flask_jwt_extended import (
     create_access_token,
@@ -20,12 +21,13 @@ def role_required(required_role):
         @wraps(fn)
         @jwt_required()
         def decorated(*args, **kwargs):
-            claims = get_jwt()   # read extra claims
-            if claims.get("role") != required_role:
+            identity = json.loads(get_jwt_identity())
+            if identity.get("role") != required_role:
                 return jsonify({"message": "Access denied"}), 403
             return fn(*args, **kwargs)
         return decorated
     return wrapper
+
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
@@ -72,23 +74,13 @@ def register():
 
     return jsonify({"message": "User registered successfully", "user_id": new_user.id}), 201
 
-@auth_bp.route('/login', methods=['POST'])
 
+@auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.json
     user = User.query.filter_by(email=data['email']).first()
 
     if user and bcrypt.check_password_hash(user.password_hash, data['password']):
-        access_token = create_access_token(
-            identity=str(user.id),
-            additional_claims={
-                "username": user.username,
-                "role": user.role
-            },
-            expires_delta=datetime.timedelta(hours=1)
-        )
-
-            # Role-specific lookup
         if user.role == "doctor":
             doctor = Doctor.query.filter_by(user_id=user.id).first()
             role_id = doctor.doctor_id if doctor else None
@@ -98,19 +90,14 @@ def login():
         else:
             role_id = None
 
-        # ✅ Include role_id in JWT identity
-        access_token = create_access_token(
-        identity=str(user.id),   # always a string
-        additional_claims={
-            "username": user.username,
+        # ✅ Encode dict as JSON string
+        identity = json.dumps({
+            "id": user.id,
             "role": user.role,
             "role_id": role_id
-        },
-        expires_delta=datetime.timedelta(hours=1)
-    )
+        })
 
-
-
+        access_token = create_access_token(identity=identity)
 
         return jsonify({
             "access_token": access_token,
@@ -118,7 +105,6 @@ def login():
             "role": user.role,
             "role_id": role_id
         }), 200
-
 
     return jsonify({"message": "Invalid credentials"}), 401
 
@@ -143,12 +129,11 @@ def patient_only():
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
 def me():
-    user_id = int(get_jwt_identity())   # convert back to int
-    claims = get_jwt()
+    identity = json.loads(get_jwt_identity())  # ✅ decode back to dict
     return jsonify({
-        "id": user_id,
-        "username": claims.get("username"),
-        "role": claims.get("role"),
-        "role_id": claims.get("role_id")
+        "id": identity["id"],
+        "role": identity["role"],
+        "role_id": identity["role_id"]
     })
+
 

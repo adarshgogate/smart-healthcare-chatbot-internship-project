@@ -12,16 +12,24 @@ from models.patient import Patient
 
 
 admin_bp = Blueprint('admin', __name__, url_prefix="/admin")
-
 def admin_required(f):
     @wraps(f)
     @jwt_required()
     def decorated(*args, **kwargs):
-        claims = get_jwt()
-        if claims.get("role", "").lower() != "admin":
+        from flask_jwt_extended import get_jwt_identity
+        import json
+
+        # Decode identity if stored as JSON string
+        identity = get_jwt_identity()
+        if isinstance(identity, str):
+            identity = json.loads(identity)
+
+        if identity.get("role", "").lower() != "admin":
             return jsonify({'message': 'Forbidden: admin access required'}), 403
+
         return f(*args, **kwargs)
     return decorated
+
 
 
 def paginate(query, page, per_page=20):
@@ -64,7 +72,8 @@ def get_doctors():
     search = request.args.get('search', '').strip()
     spec   = request.args.get('specialization', '').strip()
 
-    q = User.query.filter_by(role='Doctor')
+    q = User.query.filter(func.lower(User.role) == "doctor")
+
     if search:
         like = f'%{search}%'
         q = q.filter(or_(User.username.ilike(like), User.email.ilike(like)))

@@ -401,6 +401,7 @@ function PredictionCard({ predictions }) {
     </div>
   );
 }
+
 // Separate component so each card has its own state
 function DoctorCard({ p, loadingSlot, onBook }) {
   const [selectedDate, setSelectedDate] = useState("");
@@ -571,6 +572,12 @@ function Chatbot() {
         return;
       }
 
+      console.log("👉 Booking payload:", {
+      doctor_id: doctor.doctor_id,
+      specialization: doctor.specialization,
+      slot,
+      date: doctor.date
+    });
       const res = await api.post(
         "/appointments/book",
         {
@@ -628,6 +635,8 @@ function Chatbot() {
 
     try {
       const token = localStorage.getItem("token");
+      console.log("👉 Sending payload:", { query });
+      console.log("👉 Token:", token);
       const res = await api.post(
         "/chatbot",
         { query },

@@ -5,6 +5,7 @@
 Windows (Command Prompt, Admin):
 ```bash
 pg_ctl -D "C:\PostgresData" start
+
 Linux/Mac:
 ```bash
 sudo service postgresql start

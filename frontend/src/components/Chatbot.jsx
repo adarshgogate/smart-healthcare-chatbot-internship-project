@@ -416,9 +416,13 @@ function DoctorCard({ p, loadingSlot, onBook }) {
     try {
       setLoadingSlots(true);
       const token = localStorage.getItem("token");
-      const res = await fetch(`/appointments/slots/${p.doctor_id}?date=${date}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        `http://127.0.0.1:5000/appointments/slots/${p.doctor_id}?date=${date}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
       const data = await res.json();
       setAvailableSlots(data.available_slots || []);
       setBookedSlots(data.booked_slots || []);

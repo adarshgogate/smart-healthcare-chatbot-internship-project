@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from extensions import db
+from datetime import datetime, timedelta
 from models.appointment import Appointment
 from models.patient import Patient
 from models.doctor import Doctor
@@ -107,9 +108,9 @@ def book_appointment():
         return jsonify({"success": False, "message": "Patient record not found"}), 400
 
     # ✅ Extract doctor info from payload
-    doctor_id = data.get("doctor_id")
+    doctor_id = data.get("doctor_id") or data.get("doctorId")
     specialization = data.get("specialization")
-    slot = data.get("slot")
+    slot = data.get("slot") or data.get("time")
     date = data.get("date") or pd.Timestamp.today().strftime("%Y-%m-%d")
 
     # ✅ Lookup doctor safely
@@ -214,17 +215,33 @@ def get_available_slots(doctor_id):
         "booked_slots": slots_status["booked_slots"]
     })
 
+def generate_slots(start_time="09:00 AM", end_time="05:00 PM", interval_minutes=60):
+    slots = []
+    fmt = "%I:%M %p"
+    start = datetime.strptime(start_time, fmt)
+    end = datetime.strptime(end_time, fmt)
 
-# ✅ Helper: compute slot availability for a doctor
-def get_slots_status(doctor_id, date=None):
-    query = Appointment.query.filter_by(doctor_id=doctor_id)
-    if date:
-        query = query.filter_by(date=date)
+    while start < end:
+        slots.append(start.strftime(fmt))
+        start += timedelta(minutes=interval_minutes)
+    return slots
 
-    booked = query.all()
-    booked_times = {str(a.time) for a in booked}
-    all_slots = [f"{hour:02d}:00" for hour in range(9, 17)]
+def get_slots_status(doctor_id, date):
+    # Fetch all appointments for this doctor on the given date
+    appointments = Appointment.query.filter_by(
+        doctor_id=doctor_id,
+        date=date
+    ).all()
 
-    available = [slot for slot in all_slots if slot not in booked_times]
-    return {"available_slots": available, "booked_slots": list(booked_times)}
+    # Format booked slots consistently
+    booked_slots = [appt.time.strftime("%I:%M %p") for appt in appointments]
 
+    # Example: generate slots dynamically (9 AM – 5 PM, 1-hour interval)
+    all_slots = generate_slots("09:00 AM", "05:00 PM", 60)
+
+    available_slots = [s for s in all_slots if s not in booked_slots]
+
+    return {
+        "booked_slots": booked_slots,
+        "available_slots": available_slots
+    }

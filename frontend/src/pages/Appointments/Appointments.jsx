@@ -41,26 +41,18 @@ function Appointments({ chatbotResponse }) {
 
 
 // Booking from chatbot suggestions
-const bookFromChatbot = async (doctorId, specialization, slot) => {
+const bookFromChatbot = async (doctorId, specialization, slot, date) => {
   try {
-    // ✅ Log the payload before sending
-    console.log("Booking payload:", {
-      doctor_id: doctorId,
-      specialization,
-      slot
-    });
+    console.log("Booking payload:", { doctor_id: doctorId, specialization, slot, date });
+    
     const res = await api.post(
       "/appointments/book",
-      { doctor_id: doctorId, specialization, slot },   // ✅ only doctor_id
-      {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      }
+      { doctor_id: doctorId, specialization, slot, date },
+      { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
     );
 
     if (res.data.success) {
-      setMessage(
-        `📌 Appointment request sent to Doctor ID ${doctorId} for ${slot}. Awaiting doctor approval.`
-      );
+      setMessage(`📌 Appointment request sent to Doctor ID ${doctorId} for ${slot} on ${date}. Awaiting doctor approval.`);
       fetchAppointments();
     } else {
       setMessage(`⚠️ ${res.data.message}`);
@@ -70,6 +62,7 @@ const bookFromChatbot = async (doctorId, specialization, slot) => {
     setMessage("❌ Error booking appointment");
   }
 };
+
 
 
   const deleteAppointment = async (id) => {
@@ -123,64 +116,73 @@ const bookFromChatbot = async (doctorId, specialization, slot) => {
           <p>{chatbotResponse.reply}</p>
 
           {chatbotResponse.predictions.map((pred, idx) => {
-            // Build a unified, sorted list of slots with their booked state.
-            // Each source array is mapped independently so isBooked is always correct.
-            const availableSlots = (pred.available_slots || []).map((slot) => ({
-              slot,
-              isBooked: false,
-            }));
-            const bookedSlots = (pred.booked_slots || []).map((slot) => ({
-              slot,
-              isBooked: true,
-            }));
+  const [selectedDate, setSelectedDate] = useState("");
 
-            const allSlots = [...availableSlots, ...bookedSlots].sort((a, b) =>
-              a.slot.localeCompare(b.slot)
-            );
+  return (
+    <div key={idx} style={{ marginBottom: "1rem" }}>
+      <strong>
+        {pred.disease} ({pred.confidence}%)
+      </strong>
+      <p>
+        Doctor: {pred.doctor_name} ({pred.recommended_specialist})
+      </p>
 
-            return (
-              <div key={idx} style={{ marginBottom: "1rem" }}>
-                <strong>
-                  {pred.disease} ({pred.confidence}%)
-                </strong>
-                <p>
-                  Doctor: {pred.doctor_name} ({pred.recommended_specialist})
-                </p>
+      {/* Date Picker */}
+      <input
+        type="date"
+        value={selectedDate}
+        onChange={(e) => setSelectedDate(e.target.value)}
+        min={new Date().toISOString().split("T")[0]}
+        style={{ marginBottom: "10px" }}
+      />
 
-                <div>
-                  {allSlots.map(({ slot, isBooked }) => (
-                    <button
-                      key={slot}
-                      onClick={() =>
-                        !isBooked &&
-                        bookFromChatbot(
-                          pred.doctor_id,
-                          pred.recommended_specialist,
-                          slot
-                        )
-                      }
-                      disabled={isBooked}
-                      title={isBooked ? "This slot is already booked" : `Book ${slot}`}
-                      style={{
-                        marginRight: "8px",
-                        marginBottom: "6px",
-                        opacity: isBooked ? 0.6 : 1,
-                        cursor: isBooked ? "not-allowed" : "pointer",
-                        backgroundColor: isBooked ? "#f87171" : "#10b981",
-                        color: "white",
-                        padding: "6px 12px",
-                        border: "none",
-                        borderRadius: "4px",
-                        fontWeight: "500",
-                      }}
-                    >
-                      {isBooked ? "🔴" : "🟢"} {slot}
-                    </button>
-                  ))}
-                </div>
+      {/* Slots */}
+      <div>
+        {pred.available_slots.map((slot) => (
+          <button
+            key={slot}
+            onClick={() =>
+              bookFromChatbot(pred.doctor_id, pred.recommended_specialist, slot, selectedDate)
+            }
+            style={{
+              marginRight: "8px",
+              marginBottom: "6px",
+              backgroundColor: "#10b981",
+              color: "white",
+              padding: "6px 12px",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            🟢 {slot}
+          </button>
+        ))}
+
+        {pred.booked_slots.map((slot) => (
+          <button
+            key={slot}
+            disabled
+            style={{
+              marginRight: "8px",
+              marginBottom: "6px",
+              backgroundColor: "#f87171",
+              color: "white",
+              padding: "6px 12px",
+              border: "none",
+              borderRadius: "4px",
+              opacity: 0.6,
+              cursor: "not-allowed",
+              textDecoration: "line-through",
+            }}
+          >
+                    🔴 {slot}
+                  </button>
+                ))}
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
 
           {message && (
             <p style={{ marginTop: "10px", fontWeight: "500" }}>{message}</p>

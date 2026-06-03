@@ -9,8 +9,9 @@ from psycopg2.errors import UniqueViolation
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import pandas as pd
 import json
+from utils.notifications import send_notification
+appointments_bp = Blueprint("appointments_bp", __name__)
 
-appointments_bp = Blueprint('appointments', __name__)
 
 # ✅ GET all appointments (with optional filters)
 @appointments_bp.route('/appointments', methods=['GET'])
@@ -92,38 +93,26 @@ def add_appointment():
 @jwt_required()
 def book_appointment():
     data = request.get_json(force=True)
-    print("👉 Incoming booking data:", data)
-
-    # ✅ Decode JSON string back to dict
     identity = json.loads(get_jwt_identity())
-    print("👉 JWT identity:", identity)
 
     user_id = identity["id"]
-    role_id = identity["role_id"]
-    role = identity["role"]
-
-    # ✅ Lookup patient by user_id
     patient = Patient.query.filter_by(user_id=user_id).first()
     if not patient:
         return jsonify({"success": False, "message": "Patient record not found"}), 400
 
-    # ✅ Extract doctor info from payload
     doctor_id = data.get("doctor_id") or data.get("doctorId")
     specialization = data.get("specialization")
     slot = data.get("slot") or data.get("time")
     date = data.get("date") or pd.Timestamp.today().strftime("%Y-%m-%d")
 
-    # ✅ Lookup doctor safely
     doctor = Doctor.query.filter_by(doctor_id=doctor_id, specialization=specialization).first()
     if not doctor:
         return jsonify({"success": False, "message": "Doctor not found"}), 404
 
-    # ✅ Check slot availability
     slots_status = get_slots_status(doctor.doctor_id, date)
     if slot not in slots_status["available_slots"]:
         return jsonify({"success": False, "message": "Slot already taken"}), 400
 
-    # ✅ Create appointment
     new_appt = Appointment(
         patient_id=patient.patient_id,
         doctor_id=doctor.doctor_id,
@@ -136,6 +125,16 @@ def book_appointment():
     try:
         db.session.add(new_appt)
         db.session.commit()
+
+        # ✅ Send notifications AFTER commit
+        send_notification("patient", patient.email,
+                          "Appointment Request Sent",
+                          f"Your request with Dr. {doctor.name} for {slot} on {date} is pending confirmation.")
+
+        send_notification("doctor", doctor.email,
+                          "New Appointment Request",
+                          f"Patient {patient.name} requested {slot} on {date}.")
+
         return jsonify({"success": True, "appointment_id": new_appt.appointment_id}), 201
     except IntegrityError:
         db.session.rollback()
@@ -172,7 +171,7 @@ def update_appointment(appointment_id):
 @appointments_bp.route('/appointments/<int:appointment_id>/status', methods=['PUT'])
 def update_appointment_status(appointment_id):
     data = request.get_json()
-    new_status = data.get('status')  # "Confirmed" or "Rejected"
+    new_status = data.get('status')
 
     appointment = Appointment.query.get(appointment_id)
     if not appointment:
@@ -181,6 +180,21 @@ def update_appointment_status(appointment_id):
     if new_status not in ["Confirmed", "Rejected"]:
         return jsonify({"error": "Invalid status"}), 400
 
+    # ✅ Fetch patient & doctor from appointment
+    patient = Patient.query.get(appointment.patient_id)
+    doctor = Doctor.query.get(appointment.doctor_id)
+    slot = appointment.time.strftime("%I:%M %p")
+    date = appointment.date
+
+    if new_status == "Confirmed":
+        send_notification("patient", patient.email,
+                          "Appointment Confirmed",
+                          f"Your appointment with Dr. {doctor.name} is confirmed for {slot} on {date}.")
+    elif new_status == "Rejected":
+        send_notification("patient", patient.email,
+                          "Appointment Rejected",
+                          f"Your appointment with Dr. {doctor.name} was declined. Please choose another slot.")
+
     appointment.status = new_status
     db.session.commit()
     return jsonify({
@@ -188,7 +202,6 @@ def update_appointment_status(appointment_id):
         "appointment_id": appointment.appointment_id,
         "status": appointment.status
     }), 200
-
 
 # ✅ DELETE appointment
 @appointments_bp.route('/appointments/<int:appointment_id>', methods=['DELETE'])

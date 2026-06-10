@@ -9,7 +9,7 @@ pg_ctl -D "C:\PostgresData" start
 Linux/Mac:
 ```bash
 sudo service postgresql start
-cd cd ```
+```
 or
 ```bash
 brew services start postgresql

@@ -217,7 +217,7 @@ function PatientDashboard() {
                         color="error"
                         size="small"
                         sx={{ ml: 1 }}
-                        onClick={() => deleteAppointment(appt.appointment_id)}
+                        onClick={() => cancelAppointment (appt.appointment_id)}
                       >
                         Delete
                       </Button>

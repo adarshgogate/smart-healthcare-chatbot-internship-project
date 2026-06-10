@@ -132,7 +132,7 @@ function DoctorDashboard() {
                     <Tooltip title="Cancel">
                       <IconButton
                         color="error"
-                        onClick={() => handleDelete(a.appointment_id)}
+                        onClick={() => handleCancel(a.appointment_id)}
                       >
                         <Cancel />
                       </IconButton>

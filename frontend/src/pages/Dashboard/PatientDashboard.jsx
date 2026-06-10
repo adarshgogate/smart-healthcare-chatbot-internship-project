@@ -56,26 +56,40 @@ function PatientDashboard() {
   };
 
   const updateAppointment = async (id, appt) => {
-    try {
-      await api.put(`/appointments/${id}`, {
-        date: appt.newDate || appt.date,
-        time: appt.newTime || appt.time,
-        description: appt.newDescription || appt.description,
-        patient_id: patientId, doctor_id: appt.doctor_id, status: "Updated",
-      });
-      await fetchData();
-    } catch (err) {
-      console.error("Error updating", err);
-    }
-  };
+  try {
+    await api.put(`/appointments/${id}`, {
+      date: appt.newDate || appt.date,
+      time: appt.newTime || appt.time,
+      description: appt.newDescription || appt.description,
+      patient_id: patientId,
+      doctor_id: appt.doctor_id,
+      // ✅ no status field — let backend keep the existing status
+    });
+    await fetchData();
+  } catch (err) {
+    console.error("Error updating", err);
+  }
+};
 
-  const deleteAppointment = async (id) => {
-    if (!window.confirm("Cancel this appointment?")) return;
+  // const deleteAppointment = async (id) => {
+  //   if (!window.confirm("Cancel this appointment?")) return;
+  //   try {
+  //     await api.delete(`/appointments/${id}`);
+  //     setAppointments((prev) => prev.filter((a) => a.appointment_id !== id));
+  //   } catch (err) {
+  //     console.error("Error deleting", err);
+  //   }
+  // };
+
+    // NEW
+  const cancelAppointment = async (id) => {
     try {
-      await api.delete(`/appointments/${id}`);
-      setAppointments((prev) => prev.filter((a) => a.appointment_id !== id));
+      const res = await api.put(`/appointments/${id}/cancel`);
+      setAppointments((prev) =>
+        prev.map((a) => a.appointment_id === id ? res.data.appointment : a)
+      );
     } catch (err) {
-      console.error("Error deleting", err);
+      console.error("Error cancelling appointment", err);
     }
   };
 
@@ -325,7 +339,7 @@ function PatientDashboard() {
                               <button className="btn-ghost" onClick={() => updateAppointment(appt.appointment_id, appt)}>
                                 ✏️ Update
                               </button>
-                              <button className="btn-danger" onClick={() => deleteAppointment(appt.appointment_id)}>
+                              <button className="btn-danger" onClick={() => cancelAppointment(appt.appointment_id)}>
                                 🗑 Cancel
                               </button>
                             </div>

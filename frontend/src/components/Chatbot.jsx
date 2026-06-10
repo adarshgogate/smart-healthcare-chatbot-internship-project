@@ -599,7 +599,7 @@ function Chatbot() {
           ...prev,
           {
             sender: "bot",
-            text: `📌 Appointment confirmed with ${doctor.name} at ${slot}. Awaiting doctor approval.`,
+            text: `📌 Appointment request has sent to the  ${doctor.name} at ${slot}. Awaiting doctor approval.`,
           },
         ]);
         setSnackbar({
@@ -616,6 +616,12 @@ function Chatbot() {
       }
     } catch (err) {
       console.error("Booking error", err);
+      console.log("👉 Booking payload:", {
+        doctor_id: doctor.doctor_id,
+        specialization: doctor.specialization,
+        slot,        // ← what format is this? "09:00 AM" or "09:00"?
+        date: doctor.date
+      });
       setSnackbar({
         open: true,
         message: "⚠️ Error booking appointment. Please try again.",
@@ -665,6 +671,7 @@ function Chatbot() {
       });
     } catch (err) {
       console.error("Chatbot error", err);
+      
       setMessages((prev) => [
         ...prev.filter((m) => m.sender !== "typing"),
         {

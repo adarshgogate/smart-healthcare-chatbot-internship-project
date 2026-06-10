@@ -71,14 +71,26 @@ function DoctorDashboard() {
     }
   };
 
-  const handleDelete = async (id) => {
-    try {
-      await api.delete(`/appointments/${id}`);
-      setAppointments((prev) => prev.filter((a) => a.appointment_id !== id));
-    } catch (err) {
-      console.error("Failed to delete appointment", err);
-    }
-  };
+  // const handleDelete = async (id) => {
+  //   try {
+  //     await api.delete(`/appointments/${id}`);
+  //     setAppointments((prev) => prev.filter((a) => a.appointment_id !== id));
+  //   } catch (err) {
+  //     console.error("Failed to delete appointment", err);
+  //   }
+  // };
+
+  // NEW
+  const handleCancel = async (id) => {
+      try {
+        const res = await api.put(`/appointments/${id}/cancel`);
+        setAppointments((prev) =>
+          prev.map((a) => a.appointment_id === id ? res.data.appointment : a)
+        );
+      } catch (err) {
+        console.error("Failed to cancel appointment", err);
+      }
+    };
 
   const handleLogout = () => {
     localStorage.clear();
@@ -309,8 +321,9 @@ function DoctorDashboard() {
                               >🏁 Complete</button>
                             )}
                             <button className="btn-danger"
-                              onClick={() => handleDelete(a.appointment_id)}
-                            >🗑 Delete</button>
+                                onClick={() => handleCancel(a.appointment_id)}
+                                disabled={["Cancelled", "Completed"].includes(a.status)}
+                              >🗑 Cancel</button>
                           </div>
                         </td>
                       </tr>
@@ -323,8 +336,9 @@ function DoctorDashboard() {
         </div>
       </div>
 
-      {reportPatient && (
+            {reportPatient && (
         <PatientReport
+          key={reportPatient.id}          
           patientId={reportPatient.id}
           patientName={reportPatient.name}
           onClose={() => setReportPatient(null)}

@@ -150,3 +150,98 @@ def get_stats():
         "total_patients": total_patients,
         "total_appointments": total_appointments
     })
+
+@admin_bp.route('/analytics/status-breakdown', methods=['GET'])
+@admin_required
+def analytics_status_breakdown():
+    rows = (
+        db.session.query(Appointment.status, func.count(Appointment.appointment_id))
+        .group_by(Appointment.status)
+        .all()
+    )
+    return jsonify([{"status": r[0], "count": r[1]} for r in rows])
+
+
+@admin_bp.route('/analytics/monthly-trend', methods=['GET'])
+@admin_required
+def analytics_monthly_trend():
+    rows = (
+        db.session.query(
+            func.to_char(Appointment.date, 'YYYY-MM').label('month'),
+            func.count(Appointment.appointment_id).label('count')
+        )
+        .group_by('month')
+        .order_by('month')
+        .all()
+    )
+    return jsonify([{"month": r.month, "count": r.count} for r in rows])
+
+
+@admin_bp.route('/analytics/top-doctors', methods=['GET'])
+@admin_required
+def analytics_top_doctors():
+    limit = min(20, int(request.args.get('limit', 10)))
+    rows = (
+        db.session.query(
+            Appointment.doctor_id,
+            func.count(Appointment.appointment_id).label('count')
+        )
+        .group_by(Appointment.doctor_id)
+        .order_by(func.count(Appointment.appointment_id).desc())
+        .limit(limit)
+        .all()
+    )
+    return jsonify([{"doctor_id": r.doctor_id, "count": r.count} for r in rows])
+
+
+@admin_bp.route('/analytics/top-patients', methods=['GET'])
+@admin_required
+def analytics_top_patients():
+    limit = min(20, int(request.args.get('limit', 10)))
+    rows = (
+        db.session.query(
+            Appointment.patient_id,
+            func.count(Appointment.appointment_id).label('count')
+        )
+        .group_by(Appointment.patient_id)
+        .order_by(func.count(Appointment.appointment_id).desc())
+        .limit(limit)
+        .all()
+    )
+    return jsonify([{"patient_id": r.patient_id, "count": r.count} for r in rows])
+
+
+@admin_bp.route('/analytics/cancellation-rate', methods=['GET'])
+@admin_required
+def analytics_cancellation_rate():
+    total = Appointment.query.count()
+    cancelled = Appointment.query.filter(
+        Appointment.status.in_(["Cancelled", "Rejected"])
+    ).count()
+    rate = round((cancelled / total * 100), 2) if total else 0
+    return jsonify({
+        "total": total,
+        "cancelled_or_rejected": cancelled,
+        "cancellation_rate_pct": rate
+    })
+
+
+@admin_bp.route('/analytics/weekly-load', methods=['GET'])
+@admin_required
+def analytics_weekly_load():
+    rows = (
+        db.session.query(
+            func.extract('dow', Appointment.date).label('dow'),
+            func.count(Appointment.appointment_id).label('count')
+        )
+        .group_by('dow')
+        .order_by('dow')
+        .all()
+    )
+    day_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    result = {d: 0 for d in day_names}
+    for r in rows:
+        idx = int(r.dow)
+        if 0 <= idx <= 6:
+            result[day_names[idx]] = r.count
+    return jsonify([{"day": k, "count": v} for k, v in result.items()])
